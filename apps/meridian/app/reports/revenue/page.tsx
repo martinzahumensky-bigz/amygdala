@@ -14,7 +14,6 @@ import {
   Building2,
   Clock
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 
 interface DailyRevenue {
   date: string;
@@ -28,7 +27,7 @@ interface DailyRevenue {
   calculated_at: string;
 }
 
-interface BranchRevenue {
+interface BranchMetrics {
   date: string;
   branch_id: string;
   branch_name: string | null;
@@ -72,7 +71,7 @@ function getDataFreshness(calculatedAt: string): { status: 'fresh' | 'stale' | '
 export default function DailyRevenuePage() {
   const [loading, setLoading] = useState(true);
   const [revenue, setRevenue] = useState<DailyRevenue[]>([]);
-  const [branchData, setBranchData] = useState<BranchRevenue[]>([]);
+  const [branchData, setBranchData] = useState<BranchMetrics[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -84,34 +83,15 @@ export default function DailyRevenuePage() {
     setError(null);
 
     try {
-      // Fetch last 30 days of revenue
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const response = await fetch('/api/reports/revenue?days=30');
+      const data = await response.json();
 
-      const { data: revenueData, error: revenueError } = await supabase
-        .schema('meridian')
-        .from('gold_daily_revenue')
-        .select('*')
-        .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
-        .order('date', { ascending: false });
-
-      if (revenueError) throw revenueError;
-      setRevenue(revenueData || []);
-
-      // Fetch branch data for latest date
-      if (revenueData && revenueData.length > 0) {
-        const latestDate = revenueData[0].date;
-
-        const { data: branchDataResult, error: branchError } = await supabase
-          .schema('meridian')
-          .from('gold_branch_metrics')
-          .select('*')
-          .eq('date', latestDate)
-          .order('total_amount', { ascending: false });
-
-        if (branchError) throw branchError;
-        setBranchData(branchDataResult || []);
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch data');
       }
+
+      setRevenue(data.revenue || []);
+      setBranchData(data.branches || []);
     } catch (err) {
       console.error('Error fetching data:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
@@ -151,7 +131,7 @@ export default function DailyRevenuePage() {
               </Link>
               <div className="h-6 w-px bg-gray-200" />
               <div className="flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-primary-600" />
+                <Building2 className="h-5 w-5 text-indigo-600" />
                 <span className="font-semibold text-gray-900">Daily Revenue Report</span>
               </div>
             </div>
@@ -166,9 +146,9 @@ export default function DailyRevenuePage() {
               </div>
               <button
                 onClick={fetchData}
-                className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+                className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
               >
-                <RefreshCw className="h-4 w-4" />
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                 Refresh
               </button>
             </div>
@@ -179,7 +159,7 @@ export default function DailyRevenuePage() {
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {loading ? (
           <div className="flex h-64 items-center justify-center">
-            <RefreshCw className="h-8 w-8 animate-spin text-primary-600" />
+            <RefreshCw className="h-8 w-8 animate-spin text-indigo-600" />
           </div>
         ) : error ? (
           <div className="rounded-xl bg-red-50 p-6 text-center text-red-600">
@@ -201,7 +181,7 @@ export default function DailyRevenuePage() {
             </p>
             <Link
               href="/admin"
-              className="mt-4 inline-block rounded-lg bg-primary-600 px-6 py-2 text-white hover:bg-primary-700"
+              className="mt-4 inline-block rounded-lg bg-indigo-600 px-6 py-2 text-white hover:bg-indigo-700"
             >
               Go to Admin Panel
             </Link>
@@ -233,7 +213,7 @@ export default function DailyRevenuePage() {
               <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-500">Total Revenue</span>
-                  <DollarSign className="h-5 w-5 text-primary-600" />
+                  <DollarSign className="h-5 w-5 text-indigo-600" />
                 </div>
                 <p className="mt-2 text-3xl font-bold text-gray-900">
                   {latestRevenue ? formatCurrency(latestRevenue.total_revenue) : '-'}
@@ -362,7 +342,7 @@ export default function DailyRevenuePage() {
             <div className="mt-8 rounded-xl bg-white p-6 shadow-sm border border-gray-100">
               <h3 className="font-semibold text-gray-900 mb-4">Revenue Trend (Last 30 Days)</h3>
               <div className="h-64 flex items-end gap-1">
-                {revenue.slice().reverse().map((day, i) => {
+                {revenue.slice().reverse().map((day) => {
                   const maxRevenue = Math.max(...revenue.map(r => r.total_revenue));
                   const height = (day.total_revenue / maxRevenue) * 100;
                   const isAboveTarget = day.total_revenue >= day.revenue_target;
@@ -375,7 +355,7 @@ export default function DailyRevenuePage() {
                     >
                       <div
                         className={`w-full rounded-t transition-all ${
-                          isAboveTarget ? 'bg-green-500 hover:bg-green-600' : 'bg-primary-500 hover:bg-primary-600'
+                          isAboveTarget ? 'bg-green-500 hover:bg-green-600' : 'bg-indigo-500 hover:bg-indigo-600'
                         }`}
                         style={{ height: `${height}%` }}
                       />
@@ -395,7 +375,7 @@ export default function DailyRevenuePage() {
                     Above target
                   </div>
                   <div className="flex items-center gap-1">
-                    <div className="h-2 w-2 rounded-full bg-primary-500" />
+                    <div className="h-2 w-2 rounded-full bg-indigo-500" />
                     Below target
                   </div>
                 </div>

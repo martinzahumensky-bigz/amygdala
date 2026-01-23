@@ -5,13 +5,10 @@ import Link from 'next/link';
 import {
   ArrowLeft,
   Building2,
-  Clock,
   RefreshCw,
   AlertTriangle,
-  MapPin,
-  TrendingUp
+  MapPin
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 
 interface BranchMetrics {
   date: string;
@@ -62,38 +59,15 @@ export default function BranchPerformancePage() {
     setError(null);
 
     try {
-      // Get latest date's metrics
-      const { data: latestData, error: latestError } = await supabase
-        .schema('meridian')
-        .from('gold_branch_metrics')
-        .select('date')
-        .order('date', { ascending: false })
-        .limit(1);
+      const response = await fetch('/api/reports/branches');
+      const data = await response.json();
 
-      if (latestError) throw latestError;
-
-      if (latestData && latestData.length > 0) {
-        const latestDate = latestData[0].date;
-
-        const { data: metricsData, error: metricsError } = await supabase
-          .schema('meridian')
-          .from('gold_branch_metrics')
-          .select('*')
-          .eq('date', latestDate)
-          .order('total_amount', { ascending: false });
-
-        if (metricsError) throw metricsError;
-        setMetrics(metricsData || []);
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch data');
       }
 
-      // Get branch reference data
-      const { data: branchData, error: branchError } = await supabase
-        .schema('meridian')
-        .from('ref_branches')
-        .select('*');
-
-      if (branchError) throw branchError;
-      setBranches(branchData || []);
+      setMetrics(data.metrics || []);
+      setBranches(data.branches || []);
     } catch (err) {
       console.error('Error fetching data:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
@@ -137,15 +111,15 @@ export default function BranchPerformancePage() {
               </Link>
               <div className="h-6 w-px bg-gray-200" />
               <div className="flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-primary-600" />
+                <Building2 className="h-5 w-5 text-indigo-600" />
                 <span className="font-semibold text-gray-900">Branch Performance</span>
               </div>
             </div>
             <button
               onClick={fetchData}
-              className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
           </div>
@@ -155,7 +129,7 @@ export default function BranchPerformancePage() {
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {loading ? (
           <div className="flex h-64 items-center justify-center">
-            <RefreshCw className="h-8 w-8 animate-spin text-primary-600" />
+            <RefreshCw className="h-8 w-8 animate-spin text-indigo-600" />
           </div>
         ) : error ? (
           <div className="rounded-xl bg-red-50 p-6 text-center text-red-600">
@@ -171,7 +145,7 @@ export default function BranchPerformancePage() {
             </p>
             <Link
               href="/admin"
-              className="mt-4 inline-block rounded-lg bg-primary-600 px-6 py-2 text-white hover:bg-primary-700"
+              className="mt-4 inline-block rounded-lg bg-indigo-600 px-6 py-2 text-white hover:bg-indigo-700"
             >
               Go to Admin Panel
             </Link>
@@ -230,7 +204,7 @@ export default function BranchPerformancePage() {
                     onClick={() => setSelectedRegion(region)}
                     className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
                       selectedRegion === region
-                        ? 'bg-primary-600 text-white'
+                        ? 'bg-indigo-600 text-white'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                   >
@@ -263,7 +237,7 @@ export default function BranchPerformancePage() {
                             </>
                           ) : (
                             <>
-                              <Building2 className="h-5 w-5 text-primary-600" />
+                              <Building2 className="h-5 w-5 text-indigo-600" />
                               <h3 className="font-semibold text-gray-900">{metric.branch_name}</h3>
                             </>
                           )}
