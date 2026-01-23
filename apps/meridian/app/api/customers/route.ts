@@ -15,7 +15,8 @@ export async function GET(request: Request) {
     const validEmailOnly = searchParams.get('validEmail') === 'true';
 
     const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: { persistSession: false }
+      auth: { persistSession: false },
+      db: { schema: 'meridian' }
     });
 
     let query = supabase

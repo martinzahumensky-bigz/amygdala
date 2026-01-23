@@ -7,7 +7,8 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PU
 export async function GET() {
   try {
     const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: { persistSession: false }
+      auth: { persistSession: false },
+      db: { schema: 'meridian' }
     });
 
     // Get latest date from metrics

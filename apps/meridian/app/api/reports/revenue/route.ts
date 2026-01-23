@@ -10,7 +10,8 @@ export async function GET(request: Request) {
     const days = parseInt(searchParams.get('days') || '30');
 
     const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: { persistSession: false }
+      auth: { persistSession: false },
+      db: { schema: 'meridian' }
     });
 
     const startDate = new Date();

@@ -29,7 +29,8 @@ export async function POST(request: Request) {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { persistSession: false }
+      auth: { persistSession: false },
+      db: { schema: 'meridian' }
     });
 
     const results: Record<string, unknown> = {};
