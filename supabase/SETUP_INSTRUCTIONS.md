@@ -1,5 +1,17 @@
 # Database Setup Instructions
 
+## IMPORTANT: Expose Schemas in API
+
+After running migrations, you need to expose the `amygdala` and `meridian` schemas in the Supabase API:
+
+1. Go to: https://supabase.com/dashboard/project/xfcqszmaoxiilzudvguy/settings/api
+2. Under "Exposed schemas", add: `amygdala, meridian`
+3. Save changes
+
+This allows the REST API to access tables in these schemas.
+
+---
+
 Due to IPv6 connectivity issues on some networks, you may need to run the migrations manually through the Supabase Dashboard.
 
 ## Option 1: Supabase Dashboard SQL Editor
