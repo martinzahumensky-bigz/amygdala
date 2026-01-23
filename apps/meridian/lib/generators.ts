@@ -438,3 +438,203 @@ export function getDateRange(daysBack: number): { start: Date; end: Date } {
 
   return { start, end };
 }
+
+// Loan types and statuses
+const LOAN_TYPES = [
+  { type: 'mortgage', minAmount: 100000, maxAmount: 1000000, termMonths: [180, 240, 360], rate: [3.5, 7.5] },
+  { type: 'auto', minAmount: 10000, maxAmount: 75000, termMonths: [36, 48, 60, 72], rate: [4.5, 12.0] },
+  { type: 'personal', minAmount: 1000, maxAmount: 50000, termMonths: [12, 24, 36, 48, 60], rate: [6.0, 24.0] },
+  { type: 'business', minAmount: 25000, maxAmount: 500000, termMonths: [12, 24, 36, 60, 84], rate: [5.0, 15.0] },
+  { type: 'student', minAmount: 5000, maxAmount: 100000, termMonths: [120, 180, 240], rate: [3.0, 8.0] },
+  { type: 'home_equity', minAmount: 20000, maxAmount: 250000, termMonths: [60, 120, 180], rate: [4.0, 10.0] }
+];
+
+const LOAN_STATUSES = [
+  { status: 'Current', weight: 0.75 },
+  { status: 'Delinquent 30', weight: 0.10 },
+  { status: 'Delinquent 60', weight: 0.05 },
+  { status: 'Delinquent 90+', weight: 0.03 },
+  { status: 'Default', weight: 0.02 },
+  { status: 'Paid Off', weight: 0.05 }
+];
+
+const LOAN_PURPOSES: Record<string, string[]> = {
+  mortgage: ['Primary Residence', 'Investment Property', 'Vacation Home', 'Refinance'],
+  auto: ['New Vehicle', 'Used Vehicle', 'Refinance'],
+  personal: ['Debt Consolidation', 'Home Improvement', 'Medical Expenses', 'Major Purchase', 'Other'],
+  business: ['Working Capital', 'Equipment', 'Expansion', 'Inventory', 'Real Estate'],
+  student: ['Undergraduate', 'Graduate', 'Professional', 'Refinance'],
+  home_equity: ['Home Improvement', 'Debt Consolidation', 'Major Purchase', 'Education']
+};
+
+/**
+ * Generated Loan interface
+ */
+export interface GeneratedLoan {
+  loan_id: string;
+  customer_id: string;
+  loan_type: string;
+  principal_amount: number;
+  interest_rate: number;
+  term_months: number;
+  origination_date: string;
+  maturity_date: string;
+  outstanding_balance: number;
+  monthly_payment: number;
+  status: string;
+  days_past_due: number;
+  last_payment_date: string | null;
+  next_payment_date: string | null;
+  purpose: string;
+  collateral_value: number | null;
+  branch_id: string;
+}
+
+/**
+ * Generate loans with intentional quality issues
+ */
+export function generateLoans(
+  customerIds: string[],
+  options: {
+    loansPerCustomer?: number;
+    includeQualityIssues?: boolean;
+  } = {}
+): GeneratedLoan[] {
+  const {
+    loansPerCustomer = 0.4, // 40% of customers have loans
+    includeQualityIssues = true
+  } = options;
+
+  const loans: GeneratedLoan[] = [];
+  let loanCounter = 0;
+
+  // Determine which customers get loans
+  const customersWithLoans = Math.floor(customerIds.length * loansPerCustomer);
+  const shuffledCustomers = [...customerIds].sort(() => seededRandom() - 0.5);
+  const loanCustomers = shuffledCustomers.slice(0, customersWithLoans);
+
+  for (const customerId of loanCustomers) {
+    // Some customers have multiple loans (20% chance)
+    const loanCount = seededRandom() < 0.2 ? randomInt(2, 3) : 1;
+
+    for (let i = 0; i < loanCount; i++) {
+      const loanType = pick(LOAN_TYPES);
+      const principal = randomFloat(loanType.minAmount, loanType.maxAmount, 0);
+      const rate = randomFloat(loanType.rate[0], loanType.rate[1], 2);
+      const termMonths = pick(loanType.termMonths);
+
+      // Calculate monthly payment (simplified formula)
+      const monthlyRate = rate / 100 / 12;
+      const monthlyPayment = principal * (monthlyRate * Math.pow(1 + monthlyRate, termMonths)) /
+                            (Math.pow(1 + monthlyRate, termMonths) - 1);
+
+      // Generate origination date (within last 5 years)
+      const today = new Date();
+      const maxDaysBack = 5 * 365;
+      const daysBack = randomInt(30, maxDaysBack);
+      const originationDate = new Date(today);
+      originationDate.setDate(originationDate.getDate() - daysBack);
+
+      // Calculate maturity date
+      const maturityDate = new Date(originationDate);
+      maturityDate.setMonth(maturityDate.getMonth() + termMonths);
+
+      // Determine status based on weighted random
+      let status = 'Current';
+      let daysPastDue = 0;
+      const statusRoll = seededRandom();
+      let cumWeight = 0;
+      for (const s of LOAN_STATUSES) {
+        cumWeight += s.weight;
+        if (statusRoll < cumWeight) {
+          status = s.status;
+          break;
+        }
+      }
+
+      // Set days past due based on status
+      switch (status) {
+        case 'Delinquent 30': daysPastDue = randomInt(1, 30); break;
+        case 'Delinquent 60': daysPastDue = randomInt(31, 60); break;
+        case 'Delinquent 90+': daysPastDue = randomInt(61, 180); break;
+        case 'Default': daysPastDue = randomInt(90, 365); break;
+        default: daysPastDue = 0;
+      }
+
+      // Calculate outstanding balance
+      const monthsElapsed = Math.floor(daysBack / 30);
+      const paymentsMade = status === 'Paid Off' ? termMonths :
+                          Math.max(0, monthsElapsed - Math.floor(daysPastDue / 30));
+      let outstandingBalance = principal;
+
+      // Amortization simulation (simplified)
+      for (let m = 0; m < paymentsMade; m++) {
+        const interestPayment = outstandingBalance * monthlyRate;
+        const principalPayment = monthlyPayment - interestPayment;
+        outstandingBalance = Math.max(0, outstandingBalance - principalPayment);
+      }
+
+      if (status === 'Paid Off') {
+        outstandingBalance = 0;
+      }
+
+      // Last payment date
+      let lastPaymentDate: string | null = null;
+      let nextPaymentDate: string | null = null;
+
+      if (status !== 'Paid Off' && paymentsMade > 0) {
+        const lastPayment = new Date(originationDate);
+        lastPayment.setMonth(lastPayment.getMonth() + paymentsMade);
+        lastPaymentDate = lastPayment.toISOString().split('T')[0];
+
+        const nextPayment = new Date(lastPayment);
+        nextPayment.setMonth(nextPayment.getMonth() + 1);
+        if (nextPayment <= maturityDate) {
+          nextPaymentDate = nextPayment.toISOString().split('T')[0];
+        }
+      }
+
+      // Collateral value for secured loans
+      let collateralValue: number | null = null;
+      if (['mortgage', 'auto', 'home_equity'].includes(loanType.type)) {
+        // Collateral typically worth more than loan
+        collateralValue = Math.round(principal * randomFloat(1.1, 1.5));
+      }
+
+      // 5% chance of missing collateral value for secured loans (quality issue)
+      if (includeQualityIssues && collateralValue && seededRandom() < 0.05) {
+        collateralValue = null;
+      }
+
+      // Branch assignment
+      let branchId = pick(BRANCHES).branch_id;
+
+      // 3% chance of unknown branch (quality issue)
+      if (includeQualityIssues && seededRandom() < 0.03) {
+        branchId = 'BR-UNKNOWN-001';
+      }
+
+      loans.push({
+        loan_id: `LOAN-${String(++loanCounter).padStart(6, '0')}`,
+        customer_id: customerId,
+        loan_type: loanType.type,
+        principal_amount: Math.round(principal),
+        interest_rate: rate,
+        term_months: termMonths,
+        origination_date: originationDate.toISOString().split('T')[0],
+        maturity_date: maturityDate.toISOString().split('T')[0],
+        outstanding_balance: Math.round(outstandingBalance * 100) / 100,
+        monthly_payment: Math.round(monthlyPayment * 100) / 100,
+        status,
+        days_past_due: daysPastDue,
+        last_payment_date: lastPaymentDate,
+        next_payment_date: nextPaymentDate,
+        purpose: pick(LOAN_PURPOSES[loanType.type] || ['Other']),
+        collateral_value: collateralValue,
+        branch_id: branchId
+      });
+    }
+  }
+
+  return loans;
+}

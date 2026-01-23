@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import {
   generateCustomers,
   generateTransactions,
+  generateLoans,
   calculateDailyRevenue,
   calculateBranchMetrics,
   getDateRange,
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
 
       await supabase.from('gold_branch_metrics').delete().neq('date', '1900-01-01');
       await supabase.from('gold_daily_revenue').delete().neq('date', '1900-01-01');
+      await supabase.from('bronze_loans').delete().neq('loan_id', '');
       await supabase.from('silver_transactions').delete().neq('transaction_id', '');
       await supabase.from('silver_customers').delete().neq('customer_id', '');
       await supabase.from('ref_customer_segments').delete().neq('segment_id', '');
@@ -204,6 +206,47 @@ export async function POST(request: Request) {
     }
     results.branchMetricsRecords = metricsInserted;
 
+    // 7. Generate and insert loans
+    console.log('Generating loans...');
+    const loans = generateLoans(customerIds, {
+      loansPerCustomer: 0.4,
+      includeQualityIssues: true
+    });
+
+    // Insert loans in batches
+    const loanBatchSize = 500;
+    let loansInserted = 0;
+
+    for (let i = 0; i < loans.length; i += loanBatchSize) {
+      const batch = loans.slice(i, i + loanBatchSize);
+      const { error } = await supabase
+        .schema('meridian')
+        .from('bronze_loans')
+        .upsert(batch, { onConflict: 'loan_id' });
+
+      if (error) {
+        console.error(`Loan batch ${i} error:`, error);
+        results.loanError = error.message;
+        break;
+      }
+      loansInserted += batch.length;
+    }
+    results.loans = loansInserted;
+
+    // Count loan quality issues
+    const delinquentLoans = loans.filter(l => l.days_past_due > 0).length;
+    const unknownBranchLoans = loans.filter(l => l.branch_id === 'BR-UNKNOWN-001').length;
+    const missingCollateral = loans.filter(l =>
+      ['mortgage', 'auto', 'home_equity'].includes(l.loan_type) && !l.collateral_value
+    ).length;
+
+    results.loanQualityIssues = {
+      delinquentLoans,
+      delinquencyRate: ((delinquentLoans / loans.length) * 100).toFixed(1) + '%',
+      unknownBranchLoans,
+      missingCollateral
+    };
+
     console.log('Seed completed!');
 
     return NextResponse.json({
@@ -212,6 +255,7 @@ export async function POST(request: Request) {
       summary: {
         customers: customersInserted,
         transactions: txnsInserted,
+        loans: loansInserted,
         dailyRevenueRecords: dailyRevenue.length,
         branchMetricsRecords: metricsInserted,
         dateRange: {
