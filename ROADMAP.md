@@ -75,24 +75,23 @@
 ---
 
 ### FEAT-007: Meridian Bank Data Generation
-**Status:** Open
-**GitHub Issue:** TBD
+**Status:** Completed
 
-- [ ] Customer data generator (5000 customers)
-- [ ] Transaction generator (6 months)
-- [ ] Branch reference data
-- [ ] Seed script
+- [x] Customer data generator (5000 customers)
+- [x] Transaction generator (6 months)
+- [x] Branch reference data
+- [x] Seed script with API endpoint
+- [x] Intentional quality issues (15% bad phones, 8% bad emails, 2% unknown branches)
 
 ---
 
 ### FEAT-008: Meridian Bank Reports
-**Status:** Open
-**GitHub Issue:** TBD
+**Status:** Completed
 
-- [ ] Daily Revenue Report page
-- [ ] Branch Performance page
-- [ ] Data freshness indicators
-- [ ] Report metadata for agents
+- [x] Daily Revenue Report page
+- [x] Branch Performance page
+- [x] Data freshness indicators
+- [x] Admin panel for seeding data
 
 ---
 
@@ -131,3 +130,5 @@
 | ID | Title | Date |
 |----|-------|------|
 | FEAT-001 | Project Foundation | 2026-01-23 |
+| FEAT-007 | Meridian Bank Data Generation | 2026-01-23 |
+| FEAT-008 | Meridian Bank Reports | 2026-01-23 |
