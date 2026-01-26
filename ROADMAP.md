@@ -43,16 +43,19 @@
 ---
 
 ### FEAT-004: Spotter Agent Implementation
-**Status:** In Progress
+**Status:** Completed
 **GitHub Issue:** #2
 **Original Prompt:** "Implement the Spotter Agent - the heart of the platform"
 
-- [ ] Base agent framework
-- [ ] Missing data detection
-- [ ] Value anomaly detection (z-score)
-- [ ] Freshness checking
-- [ ] Issue creation
-- [ ] Activity logging
+- [x] Base agent framework with Claude API integration
+- [x] Missing data detection (null rate checks)
+- [x] Value anomaly detection (z-score analysis)
+- [x] Invalid reference detection (foreign key validation)
+- [x] Freshness checking (data staleness)
+- [x] Issue creation in amygdala.issues
+- [x] Activity logging to amygdala.agent_logs
+- [x] API endpoints for running agents
+- [x] Interactive Agents page with real-time status
 
 ---
 
@@ -135,5 +138,6 @@
 |----|-------|------|
 | FEAT-001 | Project Foundation | 2026-01-23 |
 | FEAT-002 | Platform Dashboard Layout | 2026-01-26 |
+| FEAT-004 | Spotter Agent Implementation | 2026-01-26 |
 | FEAT-007 | Meridian Bank Data Generation | 2026-01-23 |
 | FEAT-008 | Meridian Bank Reports | 2026-01-23 |
