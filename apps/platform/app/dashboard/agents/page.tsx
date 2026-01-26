@@ -17,7 +17,9 @@ import {
   TrendingUp,
   AlertTriangle,
   Loader2,
+  History,
 } from 'lucide-react';
+import Link from 'next/link';
 
 interface AgentConfig {
   id: string;
@@ -190,19 +192,27 @@ export default function AgentsPage() {
         title="AI Agents"
         icon={<Sparkles className="h-5 w-5" />}
         actions={
-          <Button
-            size="sm"
-            className="gap-2"
-            onClick={() => runAgent('spotter')}
-            disabled={runningAgents.has('spotter')}
-          >
-            {runningAgents.has('spotter') ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <PlayCircle className="h-4 w-4" />
-            )}
-            Run Spotter
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link href="/dashboard/agents/runs">
+              <Button variant="outline" size="sm" className="gap-2">
+                <History className="h-4 w-4" />
+                Run History
+              </Button>
+            </Link>
+            <Button
+              size="sm"
+              className="gap-2"
+              onClick={() => runAgent('spotter')}
+              disabled={runningAgents.has('spotter')}
+            >
+              {runningAgents.has('spotter') ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <PlayCircle className="h-4 w-4" />
+              )}
+              Run Spotter
+            </Button>
+          </div>
         }
       />
 
