@@ -1,7 +1,8 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Header } from '@/components/Header';
-import { Card, CardContent, Badge, Button, Avatar } from '@amygdala/ui';
+import { Card, CardContent, Badge, Button } from '@amygdala/ui';
 import {
   Sparkles,
   Eye,
@@ -15,178 +16,222 @@ import {
   Clock,
   TrendingUp,
   AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 
-const agents = [
+interface AgentConfig {
+  id: string;
+  name: string;
+  description: string;
+  icon: any;
+  color: string;
+  available: boolean;
+}
+
+const agentConfigs: AgentConfig[] = [
   {
     id: 'spotter',
     name: 'Spotter',
     description: 'Detects anomalies that would make users distrust data',
-    longDescription:
-      'Monitors reports and data assets for missing values, outliers, freshness issues, and pattern anomalies.',
     icon: Eye,
     color: 'bg-cyan-500',
-    textColor: 'text-cyan-500',
-    bgColor: 'bg-cyan-50 dark:bg-cyan-900/20',
-    status: 'running',
-    priority: 'high',
-    lastRun: '2 minutes ago',
-    nextRun: 'Continuous',
-    stats: {
-      issuesDetected: 12,
-      assetsMonitored: 52,
-      runsToday: 24,
-    },
-    recentActivity: [
-      { type: 'issue', message: 'Detected missing values in CUSTOMER_EMAIL', time: '2m ago' },
-      { type: 'scan', message: 'Completed scan of GOLD_DAILY_REVENUE', time: '5m ago' },
-      { type: 'issue', message: 'Found unusual spike in transaction volume', time: '15m ago' },
-    ],
+    available: true,
   },
   {
     id: 'debugger',
     name: 'Debugger',
     description: 'Investigates issues and finds root causes',
-    longDescription:
-      'Traces lineage upstream to identify the source of data quality issues and suggests remediation steps.',
     icon: Wrench,
     color: 'bg-orange-500',
-    textColor: 'text-orange-500',
-    bgColor: 'bg-orange-50 dark:bg-orange-900/20',
-    status: 'idle',
-    priority: 'high',
-    lastRun: '1 hour ago',
-    nextRun: 'On trigger',
-    stats: {
-      issuesResolved: 8,
-      avgTimeToResolve: '4.2h',
-      successRate: '94%',
-    },
-    recentActivity: [
-      { type: 'resolved', message: 'Identified root cause: ETL job timeout', time: '1h ago' },
-      { type: 'investigation', message: 'Investigating data freshness alert', time: '2h ago' },
-    ],
+    available: false,
   },
   {
     id: 'quality',
     name: 'Quality Agent',
     description: 'Generates and enforces contextual quality rules',
-    longDescription:
-      'Analyzes data patterns and business context to generate appropriate validation rules automatically.',
     icon: CheckCircle,
     color: 'bg-green-500',
-    textColor: 'text-green-500',
-    bgColor: 'bg-green-50 dark:bg-green-900/20',
-    status: 'idle',
-    priority: 'medium',
-    lastRun: '3 hours ago',
-    nextRun: 'Daily at 6 AM',
-    stats: {
-      rulesGenerated: 156,
-      rulesActive: 142,
-      coverage: '87%',
-    },
-    recentActivity: [
-      { type: 'rule', message: 'Generated 3 new rules for CUSTOMER_PROFILE', time: '3h ago' },
-    ],
+    available: false,
   },
   {
     id: 'transformation',
     name: 'Transformation Agent',
     description: 'Repairs data and creates derived assets',
-    longDescription:
-      'Applies data cleansing transformations and creates computed columns based on detected patterns.',
     icon: RefreshCw,
     color: 'bg-pink-500',
-    textColor: 'text-pink-500',
-    bgColor: 'bg-pink-50 dark:bg-pink-900/20',
-    status: 'idle',
-    priority: 'low',
-    lastRun: 'Never',
-    nextRun: 'Manual',
-    stats: {
-      transformations: 0,
-      recordsProcessed: 0,
-      pending: 3,
-    },
-    recentActivity: [],
+    available: false,
   },
   {
     id: 'trust',
     name: 'Trust Agent',
     description: 'Calculates holistic trust scores',
-    longDescription:
-      'Aggregates quality metrics, lineage health, and usage patterns into comprehensive trust scores.',
     icon: Star,
     color: 'bg-yellow-500',
-    textColor: 'text-yellow-500',
-    bgColor: 'bg-yellow-50 dark:bg-yellow-900/20',
-    status: 'scheduled',
-    priority: 'medium',
-    lastRun: '6 hours ago',
-    nextRun: 'In 2 hours',
-    stats: {
-      assetsScored: 52,
-      avgTrustScore: 78,
-      trendsUp: 34,
-    },
-    recentActivity: [
-      { type: 'score', message: 'Updated trust scores for 52 assets', time: '6h ago' },
-    ],
+    available: false,
   },
   {
     id: 'documentarist',
     name: 'Documentarist',
     description: 'Catalogs assets by tracing from reports to sources',
-    longDescription:
-      'Discovers and documents data assets, their relationships, and metadata through automated exploration.',
     icon: BookOpen,
     color: 'bg-purple-500',
-    textColor: 'text-purple-500',
-    bgColor: 'bg-purple-50 dark:bg-purple-900/20',
-    status: 'idle',
-    priority: 'low',
-    lastRun: '1 day ago',
-    nextRun: 'Weekly',
-    stats: {
-      assetsCataloged: 52,
-      relationshipsMapped: 87,
-      coverage: '100%',
-    },
-    recentActivity: [
-      { type: 'catalog', message: 'Cataloged new asset: FACT_MONTHLY_SUMMARY', time: '1d ago' },
-    ],
+    available: false,
   },
 ];
 
-function getStatusBadge(status: string) {
-  switch (status) {
-    case 'running':
-      return <Badge variant="success">Running</Badge>;
-    case 'scheduled':
-      return <Badge variant="info">Scheduled</Badge>;
-    case 'idle':
-      return <Badge>Idle</Badge>;
-    default:
-      return <Badge>{status}</Badge>;
-  }
+interface AgentStats {
+  totalRuns: number;
+  successfulRuns: number;
+  failedRuns: number;
+  lastRun: any;
+  isRunning: boolean;
+}
+
+interface AgentLog {
+  id: string;
+  agent_name: string;
+  action: string;
+  summary: string;
+  timestamp: string;
 }
 
 export default function AgentsPage() {
+  const [agentStats, setAgentStats] = useState<Record<string, AgentStats>>({});
+  const [recentLogs, setRecentLogs] = useState<AgentLog[]>([]);
+  const [runningAgents, setRunningAgents] = useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = useState(true);
+  const [lastRunResult, setLastRunResult] = useState<any>(null);
+
+  const fetchStatus = async () => {
+    try {
+      const res = await fetch('/api/agents/status');
+      const data = await res.json();
+      setAgentStats(data.agents || {});
+      setRecentLogs(data.recentLogs || []);
+
+      // Check which agents are running
+      const running = new Set<string>();
+      Object.entries(data.agents || {}).forEach(([name, stats]: [string, any]) => {
+        if (stats.isRunning) running.add(name);
+      });
+      setRunningAgents(running);
+    } catch (error) {
+      console.error('Failed to fetch agent status:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStatus();
+    // Poll for updates every 5 seconds
+    const interval = setInterval(fetchStatus, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const runAgent = async (agentId: string) => {
+    setRunningAgents((prev) => new Set([...prev, agentId]));
+    setLastRunResult(null);
+
+    try {
+      const res = await fetch('/api/agents/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent: agentId }),
+      });
+
+      const result = await res.json();
+      setLastRunResult(result);
+
+      // Refresh status
+      await fetchStatus();
+    } catch (error) {
+      console.error('Failed to run agent:', error);
+      setLastRunResult({ success: false, error: 'Failed to run agent' });
+    } finally {
+      setRunningAgents((prev) => {
+        const next = new Set(prev);
+        next.delete(agentId);
+        return next;
+      });
+    }
+  };
+
+  const getAgentStatus = (agentId: string) => {
+    if (runningAgents.has(agentId)) return 'running';
+    const stats = agentStats[agentId];
+    if (!stats) return 'idle';
+    if (stats.isRunning) return 'running';
+    return 'idle';
+  };
+
+  const formatTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return `${days}d ago`;
+  };
+
+  const totalIssues = Object.values(agentStats).reduce(
+    (sum, s) => sum + (s.lastRun?.results?.issuesCreated || 0),
+    0
+  );
+
   return (
     <>
       <Header
         title="AI Agents"
         icon={<Sparkles className="h-5 w-5" />}
         actions={
-          <Button size="sm" className="gap-2">
-            <PlayCircle className="h-4 w-4" />
-            Run All
+          <Button
+            size="sm"
+            className="gap-2"
+            onClick={() => runAgent('spotter')}
+            disabled={runningAgents.has('spotter')}
+          >
+            {runningAgents.has('spotter') ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <PlayCircle className="h-4 w-4" />
+            )}
+            Run Spotter
           </Button>
         }
       />
 
       <main className="p-6 space-y-6">
+        {/* Last Run Result */}
+        {lastRunResult && (
+          <Card className={lastRunResult.success ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                {lastRunResult.success ? (
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                )}
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {lastRunResult.success ? 'Agent run completed' : 'Agent run failed'}
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {lastRunResult.success
+                      ? `Found ${lastRunResult.stats?.anomaliesDetected || 0} anomalies, created ${lastRunResult.issuesCreated || 0} issues in ${(lastRunResult.duration / 1000).toFixed(1)}s`
+                      : lastRunResult.error || 'Unknown error'}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Summary Stats */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
@@ -196,7 +241,9 @@ export default function AgentsPage() {
                   <PlayCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-semibold text-gray-900 dark:text-white">1</p>
+                  <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                    {runningAgents.size}
+                  </p>
                   <p className="text-sm text-gray-500 dark:text-gray-400">Running</p>
                 </div>
               </div>
@@ -209,8 +256,10 @@ export default function AgentsPage() {
                   <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-semibold text-gray-900 dark:text-white">1</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Scheduled</p>
+                  <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                    {agentStats.spotter?.totalRuns || 0}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Total Runs</p>
                 </div>
               </div>
             </CardContent>
@@ -222,8 +271,8 @@ export default function AgentsPage() {
                   <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-semibold text-gray-900 dark:text-white">12</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Issues Today</p>
+                  <p className="text-2xl font-semibold text-gray-900 dark:text-white">{totalIssues}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Issues Created</p>
                 </div>
               </div>
             </CardContent>
@@ -235,8 +284,10 @@ export default function AgentsPage() {
                   <TrendingUp className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-semibold text-gray-900 dark:text-white">52</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Assets Monitored</p>
+                  <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                    {agentConfigs.filter((a) => a.available).length}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Agents Available</p>
                 </div>
               </div>
             </CardContent>
@@ -245,73 +296,113 @@ export default function AgentsPage() {
 
         {/* Agents Grid */}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {agents.map((agent) => (
-            <Card key={agent.id} className="overflow-hidden">
-              <div className={`h-1 ${agent.color}`} />
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`rounded-lg ${agent.color} p-2.5`}>
-                      <agent.icon className="h-5 w-5 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-900 dark:text-white">{agent.name}</h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{agent.description}</p>
-                    </div>
-                  </div>
-                  {getStatusBadge(agent.status)}
-                </div>
+          {agentConfigs.map((agent) => {
+            const stats = agentStats[agent.id];
+            const status = getAgentStatus(agent.id);
+            const isRunning = status === 'running';
 
-                <div className="mt-4 grid grid-cols-3 gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
-                  {Object.entries(agent.stats).map(([key, value]) => (
-                    <div key={key}>
-                      <p className="text-lg font-semibold text-gray-900 dark:text-white">{value}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {key.replace(/([A-Z])/g, ' $1').trim()}
-                      </p>
+            return (
+              <Card key={agent.id} className={`overflow-hidden ${!agent.available && 'opacity-60'}`}>
+                <div className={`h-1 ${agent.color}`} />
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`rounded-lg ${agent.color} p-2.5`}>
+                        <agent.icon className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900 dark:text-white">{agent.name}</h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{agent.description}</p>
+                      </div>
                     </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 flex items-center justify-between border-t border-gray-200 pt-4 dark:border-gray-700">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                    <span>Last run: {agent.lastRun}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    {agent.status === 'running' ? (
-                      <Button variant="outline" size="sm">
-                        <Pause className="mr-1.5 h-4 w-4" />
-                        Stop
-                      </Button>
+                    {isRunning ? (
+                      <Badge variant="success">Running</Badge>
+                    ) : agent.available ? (
+                      <Badge>Ready</Badge>
                     ) : (
-                      <Button variant="outline" size="sm">
-                        <PlayCircle className="mr-1.5 h-4 w-4" />
-                        Run
-                      </Button>
+                      <Badge variant="default">Coming Soon</Badge>
                     )}
                   </div>
-                </div>
 
-                {agent.recentActivity.length > 0 && (
-                  <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700">
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                      Recent Activity
-                    </p>
-                    <div className="space-y-2">
-                      {agent.recentActivity.slice(0, 2).map((activity, idx) => (
-                        <div key={idx} className="flex items-start gap-2 text-sm">
-                          <span className="mt-0.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gray-400" />
-                          <span className="flex-1 text-gray-600 dark:text-gray-400">{activity.message}</span>
-                          <span className="text-xs text-gray-400">{activity.time}</span>
-                        </div>
-                      ))}
+                  {stats && (
+                    <div className="mt-4 grid grid-cols-3 gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
+                      <div>
+                        <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                          {stats.totalRuns}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Total Runs</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                          {stats.successfulRuns}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Successful</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                          {stats.failedRuns}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Failed</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex items-center justify-between border-t border-gray-200 pt-4 dark:border-gray-700">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {stats?.lastRun ? (
+                        <span>Last run: {formatTime(stats.lastRun.started_at)}</span>
+                      ) : (
+                        <span>Never run</span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      {agent.available ? (
+                        isRunning ? (
+                          <Button variant="outline" size="sm" disabled>
+                            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                            Running...
+                          </Button>
+                        ) : (
+                          <Button variant="outline" size="sm" onClick={() => runAgent(agent.id)}>
+                            <PlayCircle className="mr-1.5 h-4 w-4" />
+                            Run
+                          </Button>
+                        )
+                      ) : (
+                        <Button variant="outline" size="sm" disabled>
+                          <Clock className="mr-1.5 h-4 w-4" />
+                          Coming Soon
+                        </Button>
+                      )}
                     </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
+
+        {/* Recent Activity */}
+        {recentLogs.length > 0 && (
+          <Card>
+            <CardContent className="p-5">
+              <h3 className="mb-4 font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
+              <div className="space-y-3">
+                {recentLogs.slice(0, 10).map((log) => (
+                  <div key={log.id} className="flex items-start gap-3 text-sm">
+                    <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-cyan-500" />
+                    <div className="flex-1">
+                      <span className="font-medium text-gray-900 dark:text-white">{log.agent_name}</span>
+                      <span className="text-gray-500 dark:text-gray-400"> · {log.action}</span>
+                      <p className="text-gray-600 dark:text-gray-400">{log.summary}</p>
+                    </div>
+                    <span className="text-xs text-gray-400">{formatTime(log.timestamp)}</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </main>
     </>
   );

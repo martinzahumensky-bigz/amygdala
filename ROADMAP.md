@@ -43,8 +43,9 @@
 ---
 
 ### FEAT-004: Spotter Agent Implementation
-**Status:** Open
-**GitHub Issue:** TBD
+**Status:** In Progress
+**GitHub Issue:** #2
+**Original Prompt:** "Implement the Spotter Agent - the heart of the platform"
 
 - [ ] Base agent framework
 - [ ] Missing data detection
