@@ -23,6 +23,7 @@ import {
   ChevronRight,
   Menu,
   X,
+  Shield,
 } from 'lucide-react';
 
 interface NavItem {
@@ -74,10 +75,12 @@ const navigation: NavSection[] = [
     ],
   },
   {
+    title: 'Monitoring',
     items: [
+      { name: 'Trust Index', href: '/dashboard/trust-index', icon: Shield },
       { name: 'Data Quality', href: '/dashboard/quality', icon: CheckCircle2 },
-      { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
       { name: 'Issues', href: '/dashboard/issues', icon: List },
+      { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
     ],
   },
 ];
