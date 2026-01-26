@@ -19,7 +19,7 @@ export class SpotterAgent extends BaseAgent {
   private meridianClient = getMeridianClient();
 
   constructor() {
-    super('Spotter', 'Detects anomalies that would make users distrust data');
+    super('spotter', 'Detects anomalies that would make users distrust data');
   }
 
   get systemPrompt(): string {
