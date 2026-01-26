@@ -32,13 +32,13 @@
 ---
 
 ### FEAT-003: Agent Command Center
-**Status:** Open
+**Status:** Completed
 **GitHub Issue:** TBD
 
-- [ ] Agent cards with status indicators
-- [ ] "Run Now" functionality
-- [ ] Activity feed
-- [ ] Agent statistics display
+- [x] Agent cards with status indicators
+- [x] "Run Now" functionality
+- [x] Activity feed
+- [x] Agent statistics display
 
 ---
 
@@ -138,6 +138,7 @@
 |----|-------|------|
 | FEAT-001 | Project Foundation | 2026-01-23 |
 | FEAT-002 | Platform Dashboard Layout | 2026-01-26 |
+| FEAT-003 | Agent Command Center | 2026-01-26 |
 | FEAT-004 | Spotter Agent Implementation | 2026-01-26 |
 | FEAT-007 | Meridian Bank Data Generation | 2026-01-23 |
 | FEAT-008 | Meridian Bank Reports | 2026-01-23 |
