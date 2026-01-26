@@ -60,24 +60,60 @@
 ---
 
 ### FEAT-005: Issues Management
-**Status:** Open
+**Status:** Completed
 **GitHub Issue:** TBD
 
-- [ ] Issues list page
-- [ ] Issue detail view
-- [ ] Status workflow (open → investigating → resolved)
-- [ ] Assignment functionality
+- [x] Issues list page with Kanban board layout
+- [x] Status filtering and severity filtering
+- [x] Status workflow (open → investigating → in_progress → resolved → closed)
+- [x] Inline status update via dropdown
+- [x] Summary stats cards by status
+- [x] Agent run history with detailed logs
 
 ---
 
 ### FEAT-006: Catalog Browser
-**Status:** Open
+**Status:** Completed
 **GitHub Issue:** TBD
 
-- [ ] Asset list with filters
-- [ ] Asset detail page
-- [ ] Trust indicators (stars, RAG)
-- [ ] Agent logs per asset
+- [x] Asset list with filters (layer, type, fitness status)
+- [x] Asset seeding for Meridian Bank data
+- [x] Trust indicators (stars, quality bar, RAG fitness)
+- [x] Layer-based organization (consumer, gold, silver, bronze, raw)
+- [x] Search functionality
+- [x] Summary cards with layer counts and health status
+
+---
+
+### FEAT-010: Data Trust Index
+**Status:** Completed
+**Original Prompt:** "Implement Data Trust Index as described in specification"
+
+- [x] Trust calculator with 6 weighted factors
+  - Documentation (15%): description, business context, lineage
+  - Governance (20%): ownership, stewardship, classification
+  - Quality (25%): quality scores, active issues
+  - Usage (15%): downstream consumption, active users
+  - Reliability (15%): pipeline stability, issue resolution
+  - Freshness (10%): data recency, refresh schedules
+- [x] Trust Index API endpoint
+- [x] Trust Index dashboard page with visualizations
+- [x] Factor breakdown with progress bars
+- [x] Improvement recommendations
+- [x] Asset-level trust scores table
+
+---
+
+### FEAT-011: Home Dashboard Widgets
+**Status:** Completed
+
+- [x] Real-time stats (assets, issues, agents, quality)
+- [x] Trust Index widget with gauge
+- [x] Asset health distribution
+- [x] Agent status cards with run buttons
+- [x] Recent issues feed
+- [x] Top assets by quality table
+- [x] Auto-refresh every 30 seconds
 
 ---
 
@@ -140,5 +176,9 @@
 | FEAT-002 | Platform Dashboard Layout | 2026-01-26 |
 | FEAT-003 | Agent Command Center | 2026-01-26 |
 | FEAT-004 | Spotter Agent Implementation | 2026-01-26 |
+| FEAT-005 | Issues Management | 2026-01-27 |
+| FEAT-006 | Catalog Browser | 2026-01-27 |
 | FEAT-007 | Meridian Bank Data Generation | 2026-01-23 |
 | FEAT-008 | Meridian Bank Reports | 2026-01-23 |
+| FEAT-010 | Data Trust Index | 2026-01-27 |
+| FEAT-011 | Home Dashboard Widgets | 2026-01-27 |
