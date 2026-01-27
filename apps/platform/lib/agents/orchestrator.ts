@@ -58,20 +58,20 @@ const AVAILABLE_AGENTS = {
   },
   quality: {
     name: 'Quality Agent',
-    description: 'Generates and enforces data quality rules',
-    capabilities: ['rule generation', 'validation', 'quality scoring'],
-    available: false,
+    description: 'Generates and enforces data quality rules based on profiling',
+    capabilities: ['rule generation', 'data profiling', 'validation', 'quality scoring'],
+    available: true,
+  },
+  trust: {
+    name: 'Trust Agent',
+    description: 'Calculates and monitors trust scores for data assets',
+    capabilities: ['trust scoring', 'trend detection', 'fitness assessment', 'recommendations'],
+    available: true,
   },
   transformation: {
     name: 'Transformation Agent',
     description: 'Creates derived datasets and repairs data issues',
     capabilities: ['data transformation', 'table creation', 'data repair'],
-    available: false,
-  },
-  trust: {
-    name: 'Trust Agent',
-    description: 'Calculates trust scores for data assets',
-    capabilities: ['trust scoring', 'fitness assessment', 'recommendations'],
     available: false,
   },
 };

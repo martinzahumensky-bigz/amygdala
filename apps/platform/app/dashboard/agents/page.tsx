@@ -51,10 +51,18 @@ const agentConfigs: AgentConfig[] = [
   {
     id: 'quality',
     name: 'Quality Agent',
-    description: 'Generates and enforces contextual quality rules',
+    description: 'Generates and enforces data quality rules',
     icon: CheckCircle,
     color: 'bg-green-500',
-    available: false,
+    available: true,
+  },
+  {
+    id: 'trust',
+    name: 'Trust Agent',
+    description: 'Calculates and monitors trust scores',
+    icon: Star,
+    color: 'bg-yellow-500',
+    available: true,
   },
   {
     id: 'transformation',
@@ -62,14 +70,6 @@ const agentConfigs: AgentConfig[] = [
     description: 'Repairs data and creates derived assets',
     icon: RefreshCw,
     color: 'bg-pink-500',
-    available: false,
-  },
-  {
-    id: 'trust',
-    name: 'Trust Agent',
-    description: 'Calculates holistic trust scores',
-    icon: Star,
-    color: 'bg-yellow-500',
     available: false,
   },
   {
