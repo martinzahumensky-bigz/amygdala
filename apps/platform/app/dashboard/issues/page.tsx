@@ -19,7 +19,9 @@ import {
   XCircle,
   Clock,
   AlertCircle,
+  ExternalLink,
 } from 'lucide-react';
+import Link from 'next/link';
 
 interface Issue {
   id: string;
@@ -67,6 +69,7 @@ const issueTypeConfig: Record<string, { color: string; label: string }> = {
   missing_data: { color: 'border-yellow-300 text-yellow-700 bg-yellow-50 dark:bg-yellow-900/30 dark:text-yellow-400', label: 'Missing Data' },
   freshness: { color: 'border-orange-300 text-orange-700 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400', label: 'Freshness' },
   missing_reference: { color: 'border-blue-300 text-blue-700 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400', label: 'Invalid Reference' },
+  ownership_missing: { color: 'border-pink-300 text-pink-700 bg-pink-50 dark:bg-pink-900/30 dark:text-pink-400', label: 'Missing Ownership' },
 };
 
 const columns = [
@@ -179,7 +182,16 @@ function IssueCard({ issue, onStatusChange }: { issue: Issue; onStatusChange: (i
             <span>·</span>
             <span title={formatDate(issue.created_at)}>{formatTime(issue.created_at)}</span>
           </div>
-          {isUpdating && <Loader2 className="h-3 w-3 animate-spin" />}
+          <div className="flex items-center gap-2">
+            {isUpdating && <Loader2 className="h-3 w-3 animate-spin" />}
+            <Link
+              href={`/dashboard/issues/${issue.id}`}
+              className="text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 flex items-center gap-1"
+              onClick={(e) => e.stopPropagation()}
+            >
+              View <ExternalLink className="h-3 w-3" />
+            </Link>
+          </div>
         </div>
       </div>
     </Card>

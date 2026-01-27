@@ -23,7 +23,7 @@ export interface DetectedIssue {
   title: string;
   description: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
-  issueType: 'anomaly' | 'quality_failure' | 'missing_data' | 'freshness';
+  issueType: 'anomaly' | 'quality_failure' | 'missing_data' | 'freshness' | 'ownership_missing' | 'missing_reference';
   affectedAssets: string[];
   metadata?: Record<string, any>;
 }

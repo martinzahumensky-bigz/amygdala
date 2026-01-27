@@ -19,7 +19,8 @@ export async function GET(request: Request) {
       .range(offset, offset + limit - 1);
 
     if (agent) {
-      query = query.eq('agent_name', agent);
+      // Case-insensitive matching for agent names
+      query = query.ilike('agent_name', agent);
     }
 
     if (status) {

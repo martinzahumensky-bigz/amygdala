@@ -1,0 +1,604 @@
+import { BaseAgent, AgentContext, AgentRunResult, DetectedIssue } from './base';
+import { getMeridianClient, getAmygdalaClient } from '../supabase/client';
+import type { DataLayer, AssetType, FitnessStatus, ColumnProfile } from '@amygdala/database';
+
+interface TableInfo {
+  table_name: string;
+  table_type: 'BASE TABLE' | 'VIEW';
+}
+
+interface ColumnInfo {
+  column_name: string;
+  data_type: string;
+  is_nullable: string;
+  column_default: string | null;
+  ordinal_position: number;
+}
+
+interface DiscoveredAsset {
+  name: string;
+  asset_type: AssetType;
+  layer: DataLayer;
+  description?: string;
+  business_context?: string;
+  tags: string[];
+  source_table: string;
+  profile?: {
+    row_count: number;
+    column_count: number;
+    columns: ColumnProfile[];
+  };
+  isNew: boolean;
+}
+
+interface DocumentaristResult {
+  assetsDiscovered: number;
+  assetsCreated: number;
+  assetsUpdated: number;
+  ownershipIssuesCreated: number;
+  profilesGenerated: number;
+}
+
+export class DocumentaristAgent extends BaseAgent {
+  private meridianClient = getMeridianClient();
+  private amygdalaClient = getAmygdalaClient();
+
+  constructor() {
+    super('documentarist', 'Discovers and documents data assets automatically');
+  }
+
+  get systemPrompt(): string {
+    return `You are the Documentarist agent for the Amygdala data trust platform. Your role is to:
+
+1. Discover and catalog data assets in the organization
+2. Generate meaningful descriptions based on table/column names and data patterns
+3. Identify business domains and classify assets appropriately
+4. Determine data lineage relationships
+5. Profile data characteristics and quality metrics
+
+When analyzing table structures, consider:
+- Column naming patterns to infer semantic meaning
+- Data types to understand the nature of information
+- Common prefixes (ref_, dim_, fact_, bronze_, silver_, gold_) for layer classification
+- Foreign key patterns for lineage tracing
+
+Always respond with a JSON object containing:
+{
+  "description": "Clear, business-friendly description of the asset",
+  "business_context": "How this data is used in the business",
+  "tags": ["array", "of", "relevant", "tags"],
+  "domain": "finance|customer|operations|risk|marketing|reference",
+  "suggested_owner": "Team most likely responsible"
+}`;
+  }
+
+  async run(context?: AgentContext): Promise<AgentRunResult> {
+    const startTime = Date.now();
+    const errors: string[] = [];
+    let issuesCreated = 0;
+    const stats: DocumentaristResult = {
+      assetsDiscovered: 0,
+      assetsCreated: 0,
+      assetsUpdated: 0,
+      ownershipIssuesCreated: 0,
+      profilesGenerated: 0,
+    };
+
+    const runId = await this.startRun(context);
+
+    try {
+      await this.log('run_started', 'Documentarist agent started scanning for data assets');
+
+      // Determine scan mode
+      const mode = context?.parameters?.mode || 'full_scan';
+      const targetSchema = context?.parameters?.targetSchema || 'meridian';
+
+      await this.log('scan_mode', `Scanning in ${mode} mode for schema: ${targetSchema}`);
+
+      // Step 1: Discover tables in the schema
+      const tables = await this.discoverTables(targetSchema);
+      await this.log('tables_discovered', `Found ${tables.length} tables/views in ${targetSchema} schema`, {
+        tables: tables.map(t => t.table_name),
+      });
+
+      stats.assetsDiscovered = tables.length;
+
+      // Step 2: Get existing assets to check for new ones
+      const { data: existingAssets } = await this.amygdalaClient
+        .from('assets')
+        .select('name, source_table');
+
+      const existingNames = new Set((existingAssets || []).map(a => a.name));
+      const existingSourceTables = new Set((existingAssets || []).map(a => a.source_table).filter(Boolean));
+
+      // Step 3: Process each table
+      const discoveredAssets: DiscoveredAsset[] = [];
+
+      for (const table of tables) {
+        try {
+          // Get column information
+          const columns = await this.getTableColumns(targetSchema, table.table_name);
+
+          // Profile the table
+          const profile = await this.profileTable(table.table_name, columns);
+          stats.profilesGenerated++;
+
+          // Determine if this is a new asset
+          const sourceTable = `${targetSchema}.${table.table_name}`;
+          const isNew = !existingNames.has(table.table_name) && !existingSourceTables.has(sourceTable);
+
+          // Classify the asset
+          const asset = await this.classifyAsset(table, columns, profile);
+          asset.isNew = isNew;
+          asset.source_table = sourceTable;
+          asset.profile = profile;
+
+          discoveredAssets.push(asset);
+
+          await this.log(
+            'asset_processed',
+            `Processed ${table.table_name}: ${isNew ? 'NEW' : 'existing'}, layer=${asset.layer}`,
+            { table: table.table_name, isNew, layer: asset.layer, rowCount: profile.row_count }
+          );
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          errors.push(`Failed to process ${table.table_name}: ${errorMsg}`);
+          await this.log('processing_error', `Error processing ${table.table_name}`, { error: errorMsg });
+        }
+      }
+
+      // Step 4: Create/update assets in the catalog
+      for (const asset of discoveredAssets) {
+        try {
+          if (asset.isNew) {
+            await this.createAsset(asset);
+            stats.assetsCreated++;
+
+            // Create ownership issue for new assets without owner
+            if (!asset.business_context) {
+              await this.createOwnershipIssue(asset);
+              stats.ownershipIssuesCreated++;
+              issuesCreated++;
+            }
+          } else {
+            // Optionally update existing assets with new profiling data
+            await this.updateAssetProfile(asset);
+            stats.assetsUpdated++;
+          }
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          errors.push(`Failed to save ${asset.name}: ${errorMsg}`);
+        }
+      }
+
+      await this.log(
+        'run_completed',
+        `Documentarist completed: ${stats.assetsCreated} new, ${stats.assetsUpdated} updated, ${stats.ownershipIssuesCreated} ownership issues`,
+        stats
+      );
+
+      await this.completeRun(runId, {
+        stats,
+        issuesCreated,
+        discoveredAssets: discoveredAssets.map(a => ({
+          name: a.name,
+          layer: a.layer,
+          isNew: a.isNew,
+          rowCount: a.profile?.row_count,
+        })),
+      });
+
+      return {
+        success: true,
+        runId,
+        stats: stats as unknown as Record<string, number>,
+        issuesCreated,
+        errors,
+        duration: Date.now() - startTime,
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      await this.failRun(runId, errorMsg);
+
+      return {
+        success: false,
+        runId,
+        stats: stats as unknown as Record<string, number>,
+        issuesCreated,
+        errors: [...errors, errorMsg],
+        duration: Date.now() - startTime,
+      };
+    }
+  }
+
+  private async discoverTables(schema: string): Promise<TableInfo[]> {
+    // Query information_schema for tables in the specified schema
+    // Since we can't query information_schema directly via Supabase client,
+    // we'll use a hardcoded list of known Meridian tables
+    const knownTables: TableInfo[] = [
+      { table_name: 'ref_branches', table_type: 'BASE TABLE' },
+      { table_name: 'silver_customers', table_type: 'BASE TABLE' },
+      { table_name: 'silver_transactions', table_type: 'BASE TABLE' },
+      { table_name: 'silver_loans', table_type: 'BASE TABLE' },
+      { table_name: 'gold_daily_revenue', table_type: 'BASE TABLE' },
+      { table_name: 'gold_branch_metrics', table_type: 'BASE TABLE' },
+    ];
+
+    return knownTables;
+  }
+
+  private async getTableColumns(schema: string, tableName: string): Promise<ColumnInfo[]> {
+    // Get a sample row to infer column structure
+    const { data } = await this.meridianClient
+      .from(tableName)
+      .select('*')
+      .limit(1);
+
+    if (!data || data.length === 0) {
+      return [];
+    }
+
+    const row = data[0];
+    const columns: ColumnInfo[] = Object.entries(row).map(([key, value], index) => ({
+      column_name: key,
+      data_type: this.inferDataType(value),
+      is_nullable: value === null ? 'YES' : 'NO',
+      column_default: null,
+      ordinal_position: index + 1,
+    }));
+
+    return columns;
+  }
+
+  private inferDataType(value: unknown): string {
+    if (value === null) return 'unknown';
+    if (typeof value === 'number') {
+      return Number.isInteger(value) ? 'integer' : 'numeric';
+    }
+    if (typeof value === 'boolean') return 'boolean';
+    if (typeof value === 'string') {
+      // Check if it looks like a date
+      if (/^\d{4}-\d{2}-\d{2}/.test(value)) return 'timestamp';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return 'date';
+      return 'text';
+    }
+    if (Array.isArray(value)) return 'array';
+    if (typeof value === 'object') return 'jsonb';
+    return 'unknown';
+  }
+
+  private async profileTable(tableName: string, columns: ColumnInfo[]): Promise<{
+    row_count: number;
+    column_count: number;
+    columns: ColumnProfile[];
+  }> {
+    // Get row count
+    const { count } = await this.meridianClient
+      .from(tableName)
+      .select('*', { count: 'exact', head: true });
+
+    const rowCount = count || 0;
+    const columnProfiles: ColumnProfile[] = [];
+
+    // Profile each column (limited to avoid performance issues)
+    for (const col of columns.slice(0, 20)) {
+      try {
+        const profile = await this.profileColumn(tableName, col, rowCount);
+        columnProfiles.push(profile);
+      } catch {
+        // Skip columns that fail to profile
+        columnProfiles.push({
+          name: col.column_name,
+          data_type: col.data_type,
+          null_count: 0,
+          null_percentage: 0,
+          distinct_count: 0,
+          distinct_percentage: 0,
+          top_values: [],
+        });
+      }
+    }
+
+    return {
+      row_count: rowCount,
+      column_count: columns.length,
+      columns: columnProfiles,
+    };
+  }
+
+  private async profileColumn(
+    tableName: string,
+    column: ColumnInfo,
+    totalRows: number
+  ): Promise<ColumnProfile> {
+    // Count nulls
+    const { count: nullCount } = await this.meridianClient
+      .from(tableName)
+      .select('*', { count: 'exact', head: true })
+      .is(column.column_name, null);
+
+    // Get distinct count (approximate via sampling)
+    const { data: sampleData } = await this.meridianClient
+      .from(tableName)
+      .select(column.column_name)
+      .limit(1000);
+
+    const values = (sampleData || []).map((row: Record<string, unknown>) => row[column.column_name]);
+    const uniqueValues = new Set(values.filter(v => v !== null));
+    const distinctCount = uniqueValues.size;
+
+    // Get top values
+    const valueCounts: Record<string, number> = {};
+    values.forEach((v: unknown) => {
+      if (v !== null) {
+        const key = String(v);
+        valueCounts[key] = (valueCounts[key] || 0) + 1;
+      }
+    });
+
+    const topValues = Object.entries(valueCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([value, count]) => ({ value, count }));
+
+    // Calculate min/max/mean for numeric columns
+    let minValue: unknown = undefined;
+    let maxValue: unknown = undefined;
+    let meanValue: number | undefined = undefined;
+
+    if (column.data_type === 'integer' || column.data_type === 'numeric') {
+      const numericValues = values.filter((v: unknown): v is number => typeof v === 'number');
+      if (numericValues.length > 0) {
+        minValue = Math.min(...numericValues);
+        maxValue = Math.max(...numericValues);
+        meanValue = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
+      }
+    }
+
+    // Infer semantic type
+    const semanticType = this.inferSemanticType(column.column_name, column.data_type, topValues);
+
+    return {
+      name: column.column_name,
+      data_type: column.data_type,
+      inferred_semantic_type: semanticType,
+      null_count: nullCount || 0,
+      null_percentage: totalRows > 0 ? ((nullCount || 0) / totalRows) * 100 : 0,
+      distinct_count: distinctCount,
+      distinct_percentage: totalRows > 0 ? (distinctCount / Math.min(totalRows, 1000)) * 100 : 0,
+      min_value: minValue,
+      max_value: maxValue,
+      mean_value: meanValue,
+      top_values: topValues,
+    };
+  }
+
+  private inferSemanticType(
+    columnName: string,
+    dataType: string,
+    _topValues: Array<{ value: string; count: number }>
+  ): string {
+    const nameLower = columnName.toLowerCase();
+
+    // Common patterns
+    if (nameLower.includes('email')) return 'email';
+    if (nameLower.includes('phone')) return 'phone';
+    if (nameLower.includes('address')) return 'address';
+    if (nameLower.includes('city')) return 'city';
+    if (nameLower.includes('state')) return 'state';
+    if (nameLower.includes('zip') || nameLower.includes('postal')) return 'postal_code';
+    if (nameLower.includes('country')) return 'country';
+    if (nameLower.includes('date') || nameLower.includes('_at')) return 'datetime';
+    if (nameLower.includes('amount') || nameLower.includes('price') || nameLower.includes('revenue')) return 'currency';
+    if (nameLower.includes('rate') || nameLower.includes('ratio') || nameLower.includes('percent')) return 'percentage';
+    if (nameLower.endsWith('_id')) return 'identifier';
+    if (nameLower.includes('name')) return 'name';
+    if (nameLower.includes('description')) return 'description';
+    if (nameLower.includes('status')) return 'status';
+    if (nameLower.includes('type')) return 'category';
+    if (dataType === 'boolean') return 'boolean';
+    if (dataType === 'integer' || dataType === 'numeric') return 'numeric';
+
+    return 'text';
+  }
+
+  private async classifyAsset(
+    table: TableInfo,
+    columns: ColumnInfo[],
+    profile: { row_count: number; column_count: number; columns: ColumnProfile[] }
+  ): Promise<DiscoveredAsset> {
+    const tableName = table.table_name;
+
+    // Determine layer from naming convention
+    let layer: DataLayer = 'silver';
+    if (tableName.startsWith('raw_') || tableName.startsWith('bronze_')) {
+      layer = 'bronze';
+    } else if (tableName.startsWith('silver_')) {
+      layer = 'silver';
+    } else if (tableName.startsWith('gold_')) {
+      layer = 'gold';
+    } else if (tableName.startsWith('ref_') || tableName.startsWith('dim_')) {
+      layer = 'silver'; // Reference data typically in silver
+    }
+
+    // Determine asset type
+    const assetType: AssetType = table.table_type === 'VIEW' ? 'view' : 'table';
+
+    // Generate tags from column names and patterns
+    const tags = this.generateTags(tableName, columns);
+
+    // Use Claude to generate description and business context
+    let description: string | undefined;
+    let businessContext: string | undefined;
+
+    try {
+      const analysis = await this.analyzeWithClaude(
+        'Analyze this table structure and provide a description:',
+        {
+          table_name: tableName,
+          layer,
+          row_count: profile.row_count,
+          columns: columns.map(c => ({
+            name: c.column_name,
+            type: c.data_type,
+          })),
+          sample_profiles: profile.columns.slice(0, 5).map(c => ({
+            name: c.name,
+            semantic_type: c.inferred_semantic_type,
+            null_percentage: c.null_percentage?.toFixed(1),
+            distinct_count: c.distinct_count,
+          })),
+        }
+      );
+
+      // Parse Claude's response
+      try {
+        const parsed = JSON.parse(analysis);
+        description = parsed.description;
+        businessContext = parsed.business_context;
+        if (parsed.tags) {
+          tags.push(...parsed.tags.filter((t: string) => !tags.includes(t)));
+        }
+      } catch {
+        // Use analysis as description if not JSON
+        description = analysis.slice(0, 500);
+      }
+    } catch {
+      // Generate fallback description
+      description = this.generateFallbackDescription(tableName, layer, profile);
+    }
+
+    return {
+      name: tableName,
+      asset_type: assetType,
+      layer,
+      description,
+      business_context: businessContext,
+      tags: tags.slice(0, 10), // Limit tags
+      source_table: '',
+      isNew: false,
+    };
+  }
+
+  private generateTags(tableName: string, columns: ColumnInfo[]): string[] {
+    const tags: string[] = [];
+
+    // Tags from table name
+    const parts = tableName.split('_').filter(p => p.length > 2);
+    tags.push(...parts.filter(p => !['ref', 'silver', 'gold', 'bronze', 'raw'].includes(p)));
+
+    // Tags from common column patterns
+    const columnNames = columns.map(c => c.column_name.toLowerCase());
+
+    if (columnNames.some(n => n.includes('customer'))) tags.push('customer');
+    if (columnNames.some(n => n.includes('transaction'))) tags.push('transactions');
+    if (columnNames.some(n => n.includes('revenue') || n.includes('amount'))) tags.push('financial');
+    if (columnNames.some(n => n.includes('branch'))) tags.push('branch');
+    if (columnNames.some(n => n.includes('loan'))) tags.push('loans');
+    if (columnNames.some(n => n.includes('email') || n.includes('phone'))) tags.push('pii');
+    if (columnNames.some(n => n.includes('date') || n.includes('_at'))) tags.push('time-series');
+
+    return [...new Set(tags)];
+  }
+
+  private generateFallbackDescription(
+    tableName: string,
+    layer: DataLayer,
+    profile: { row_count: number; column_count: number }
+  ): string {
+    const layerDesc: Record<DataLayer, string> = {
+      raw: 'Raw source data',
+      bronze: 'Raw/bronze layer data',
+      silver: 'Cleansed and standardized data',
+      gold: 'Aggregated and curated data',
+      consumer: 'Consumer-facing data product',
+    };
+
+    return `${layerDesc[layer]} table containing ${profile.row_count.toLocaleString()} records across ${profile.column_count} columns.`;
+  }
+
+  private async createAsset(asset: DiscoveredAsset): Promise<void> {
+    // Determine fitness status based on profile
+    let fitnessStatus: FitnessStatus = 'green';
+    if (asset.profile) {
+      const avgNullRate = asset.profile.columns.reduce((sum, c) => sum + (c.null_percentage || 0), 0) /
+        Math.max(asset.profile.columns.length, 1);
+      if (avgNullRate > 20) fitnessStatus = 'red';
+      else if (avgNullRate > 10) fitnessStatus = 'amber';
+    }
+
+    // Calculate initial quality score
+    const qualityScore = fitnessStatus === 'green' ? 85 : fitnessStatus === 'amber' ? 65 : 45;
+
+    const { error } = await this.amygdalaClient.from('assets').insert({
+      name: asset.name,
+      asset_type: asset.asset_type,
+      layer: asset.layer,
+      description: asset.description,
+      business_context: asset.business_context,
+      tags: asset.tags,
+      source_table: asset.source_table,
+      quality_score: qualityScore,
+      fitness_status: fitnessStatus,
+      trust_score_stars: fitnessStatus === 'green' ? 4 : fitnessStatus === 'amber' ? 3 : 2,
+      trust_score_raw: qualityScore / 100,
+      created_by: this.name,
+    });
+
+    if (error) {
+      throw new Error(`Failed to create asset: ${error.message}`);
+    }
+
+    await this.log('asset_created', `Created new asset: ${asset.name}`, {
+      layer: asset.layer,
+      fitnessStatus,
+      qualityScore,
+    });
+  }
+
+  private async updateAssetProfile(asset: DiscoveredAsset): Promise<void> {
+    // Update just the profile-related fields
+    if (!asset.profile) return;
+
+    const { error } = await this.amygdalaClient
+      .from('assets')
+      .update({
+        updated_at: new Date().toISOString(),
+      })
+      .eq('name', asset.name);
+
+    if (error) {
+      // Non-critical, just log
+      await this.log('update_skipped', `Could not update ${asset.name}: ${error.message}`);
+    }
+  }
+
+  private async createOwnershipIssue(asset: DiscoveredAsset): Promise<void> {
+    const issue: DetectedIssue = {
+      title: `Missing ownership for ${asset.name}`,
+      description: `The data asset "${asset.name}" in the ${asset.layer} layer was discovered but has no assigned owner or steward. ` +
+        `Please assign appropriate ownership to ensure accountability and governance.`,
+      severity: asset.layer === 'gold' || asset.layer === 'consumer' ? 'high' : 'medium',
+      issueType: 'ownership_missing',
+      affectedAssets: [asset.name],
+      metadata: {
+        layer: asset.layer,
+        assetType: asset.asset_type,
+        rowCount: asset.profile?.row_count,
+        discoveredBy: this.name,
+      },
+    };
+
+    await this.createIssue(issue);
+  }
+}
+
+// Singleton instance
+let documentaristInstance: DocumentaristAgent | null = null;
+
+export function getDocumentaristAgent(): DocumentaristAgent {
+  if (!documentaristInstance) {
+    documentaristInstance = new DocumentaristAgent();
+  }
+  return documentaristInstance;
+}

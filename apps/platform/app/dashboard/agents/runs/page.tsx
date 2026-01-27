@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { Card, CardContent, Badge, Button, Dropdown } from '@amygdala/ui';
 import {
@@ -17,6 +18,8 @@ import {
   FileText,
   AlertTriangle,
   ArrowLeft,
+  BookOpen,
+  Star,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -49,11 +52,13 @@ interface RunDetails {
   issues: any[];
 }
 
-const agentConfig: Record<string, { color: string; icon: any }> = {
-  spotter: { color: 'bg-cyan-500', icon: Eye },
-  debugger: { color: 'bg-orange-500', icon: Wrench },
-  quality: { color: 'bg-green-500', icon: CheckCircle },
-  transformation: { color: 'bg-pink-500', icon: RefreshCw },
+const agentConfig: Record<string, { color: string; icon: any; label: string }> = {
+  spotter: { color: 'bg-cyan-500', icon: Eye, label: 'Spotter' },
+  debugger: { color: 'bg-orange-500', icon: Wrench, label: 'Debugger' },
+  quality: { color: 'bg-green-500', icon: CheckCircle, label: 'Quality' },
+  transformation: { color: 'bg-pink-500', icon: RefreshCw, label: 'Transformation' },
+  trust: { color: 'bg-yellow-500', icon: Star, label: 'Trust' },
+  documentarist: { color: 'bg-purple-500', icon: BookOpen, label: 'Documentarist' },
 };
 
 const statusConfig = {
@@ -337,13 +342,36 @@ function RunDetails({ runId, onClose }: { runId: string; onClose: () => void }) 
   );
 }
 
-export default function AgentRunsPage() {
+function AgentRunsContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
-  const [agentFilter, setAgentFilter] = useState<string>('all');
+
+  // Initialize filters from URL params
+  const initialAgent = searchParams.get('agent') || 'all';
+  const [agentFilter, setAgentFilter] = useState<string>(initialAgent);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Update URL when filter changes
+  const updateFilter = (type: 'agent' | 'status', value: string) => {
+    if (type === 'agent') {
+      setAgentFilter(value);
+      // Update URL without full navigation
+      const params = new URLSearchParams(searchParams.toString());
+      if (value === 'all') {
+        params.delete('agent');
+      } else {
+        params.set('agent', value);
+      }
+      const newUrl = params.toString() ? `?${params.toString()}` : '/dashboard/agents/runs';
+      router.replace(newUrl);
+    } else {
+      setStatusFilter(value);
+    }
+  };
 
   const fetchRuns = async () => {
     try {
@@ -401,9 +429,12 @@ export default function AgentRunsPage() {
               { value: 'all', label: 'All Agents' },
               { value: 'spotter', label: 'Spotter' },
               { value: 'debugger', label: 'Debugger' },
+              { value: 'documentarist', label: 'Documentarist' },
               { value: 'quality', label: 'Quality' },
+              { value: 'trust', label: 'Trust' },
+              { value: 'transformation', label: 'Transformation' },
             ]}
-            onChange={setAgentFilter}
+            onChange={(value) => updateFilter('agent', value)}
           />
           <Dropdown
             placeholder="Status"
@@ -414,7 +445,7 @@ export default function AgentRunsPage() {
               { value: 'completed', label: 'Completed' },
               { value: 'failed', label: 'Failed' },
             ]}
-            onChange={setStatusFilter}
+            onChange={(value) => updateFilter('status', value)}
           />
           <span className="text-sm text-gray-500 dark:text-gray-400">
             {total} runs total
@@ -462,5 +493,39 @@ export default function AgentRunsPage() {
         )}
       </main>
     </>
+  );
+}
+
+function LoadingFallback() {
+  return (
+    <>
+      <Header
+        title="Agent Run History"
+        icon={<History className="h-5 w-5" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <Link href="/dashboard/agents">
+              <Button variant="outline" size="sm" className="gap-2">
+                <ArrowLeft className="h-4 w-4" />
+                Back to Agents
+              </Button>
+            </Link>
+          </div>
+        }
+      />
+      <main className="p-6">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+        </div>
+      </main>
+    </>
+  );
+}
+
+export default function AgentRunsPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <AgentRunsContent />
+    </Suspense>
   );
 }

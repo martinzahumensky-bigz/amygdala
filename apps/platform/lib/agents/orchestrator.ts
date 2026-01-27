@@ -14,6 +14,11 @@ export interface ChatContext {
   messages: ChatMessage[];
   activeAgent?: string;
   sessionId: string;
+  entityContext?: {
+    type: 'issue' | 'asset' | 'recommendation' | 'general';
+    id?: string;
+    title?: string;
+  };
 }
 
 export interface OrchestratorResponse {
@@ -31,12 +36,25 @@ const AVAILABLE_AGENTS = {
     name: 'Spotter',
     description: 'Detects anomalies and data quality issues in your data assets',
     capabilities: ['anomaly detection', 'null rate analysis', 'outlier detection', 'freshness checks', 'reference validation'],
+    available: true,
   },
   debugger: {
     name: 'Debugger',
     description: 'Investigates issues and finds root causes',
     capabilities: ['root cause analysis', 'lineage tracing', 'issue investigation'],
-    available: false,
+    available: true,
+  },
+  documentarist: {
+    name: 'Documentarist',
+    description: 'Discovers and documents data assets automatically',
+    capabilities: ['asset discovery', 'profiling', 'description generation', 'lineage tracing'],
+    available: true,
+  },
+  operator: {
+    name: 'Operator',
+    description: 'Executes approved changes to assets, issues, and pipelines',
+    capabilities: ['metadata updates', 'issue resolution', 'fix execution', 'pipeline refresh'],
+    available: true,
   },
   quality: {
     name: 'Quality Agent',
@@ -120,6 +138,12 @@ Always be helpful and proactive in suggesting next steps.`;
       // Get additional context
       const dataContext = await this.gatherDataContext();
 
+      // Get entity-specific context if available
+      let entityContextInfo = '';
+      if (context.entityContext) {
+        entityContextInfo = await this.getEntityContextInfo(context.entityContext);
+      }
+
       // Create enriched system prompt
       const enrichedPrompt = `${this.systemPrompt}
 
@@ -130,7 +154,8 @@ Current Platform State:
 - Average Quality: ${dataContext.avgQuality}%
 
 Recent Issues:
-${dataContext.recentIssuesSummary}`;
+${dataContext.recentIssuesSummary}
+${entityContextInfo}`;
 
       // Call Claude
       const response = await this.anthropic.messages.create({
@@ -226,6 +251,76 @@ ${dataContext.recentIssuesSummary}`;
         avgQuality: 0,
         recentIssuesSummary: 'Unable to fetch issues',
       };
+    }
+  }
+
+  private async getEntityContextInfo(entityContext: NonNullable<ChatContext['entityContext']>): Promise<string> {
+    try {
+      if (entityContext.type === 'issue' && entityContext.id) {
+        const { data: issue } = await this.supabase
+          .from('issues')
+          .select('*')
+          .eq('id', entityContext.id)
+          .single();
+
+        if (issue) {
+          return `
+FOCUSED CONTEXT - Issue:
+You are helping the user with a specific issue:
+- Title: ${issue.title}
+- Severity: ${issue.severity}
+- Type: ${issue.issue_type}
+- Status: ${issue.status}
+- Description: ${issue.description}
+- Affected Assets: ${issue.affected_assets?.join(', ') || 'None'}
+${issue.metadata?.debuggerAnalysis ? `
+Analysis Available:
+- Root Cause: ${issue.metadata.debuggerAnalysis.rootCause}
+- Confidence: ${issue.metadata.debuggerAnalysis.confidence}
+- Recommendation: ${issue.metadata.debuggerAnalysis.recommendation}
+` : ''}
+Focus your responses on this specific issue. If the user asks about fixes, suggest running the Debugger agent to analyze the issue.`;
+        }
+      } else if (entityContext.type === 'asset' && entityContext.id) {
+        const { data: asset } = await this.supabase
+          .from('assets')
+          .select('*')
+          .eq('id', entityContext.id)
+          .single();
+
+        if (asset) {
+          // Get open issues for this asset
+          const { data: assetIssues } = await this.supabase
+            .from('issues')
+            .select('title, severity')
+            .contains('affected_assets', [asset.name])
+            .in('status', ['open', 'investigating', 'in_progress'])
+            .limit(5);
+
+          return `
+FOCUSED CONTEXT - Asset:
+You are helping the user with a specific data asset:
+- Name: ${asset.name}
+- Type: ${asset.asset_type}
+- Layer: ${asset.layer}
+- Description: ${asset.description || 'No description'}
+- Quality Score: ${asset.quality_score || 'N/A'}%
+- Trust Score: ${asset.trust_score_stars || 0}/5 stars
+- Fitness Status: ${asset.fitness_status}
+- Owner: ${asset.owner || 'Not assigned'}
+- Steward: ${asset.steward || 'Not assigned'}
+${assetIssues && assetIssues.length > 0 ? `
+Open Issues:
+${assetIssues.map(i => `- [${i.severity}] ${i.title}`).join('\n')}
+` : ''}
+Focus your responses on this specific asset. Help the user improve its trust score and resolve any issues.`;
+        }
+      }
+
+      return '';
+    } catch (error) {
+      console.error('Entity context error:', error);
+      return '';
     }
   }
 

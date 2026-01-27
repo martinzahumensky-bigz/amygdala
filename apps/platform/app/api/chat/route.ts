@@ -5,7 +5,7 @@ import { getAmygdalaClient } from '@/lib/supabase/client';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { message, sessionId, history = [] } = body;
+    const { message, sessionId, history = [], context: entityContext } = body;
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json(
@@ -16,10 +16,11 @@ export async function POST(request: Request) {
 
     const orchestrator = getOrchestratorAgent();
 
-    // Build context
+    // Build context with optional entity context (issue/asset)
     const context: ChatContext = {
       messages: history as ChatMessage[],
       sessionId: sessionId || `session-${Date.now()}`,
+      entityContext: entityContext as { type: string; id?: string; title?: string } | undefined,
     };
 
     // Process the message

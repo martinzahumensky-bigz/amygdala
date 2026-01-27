@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   Loader2,
   History,
+  Settings2,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -45,7 +46,7 @@ const agentConfigs: AgentConfig[] = [
     description: 'Investigates issues and finds root causes',
     icon: Wrench,
     color: 'bg-orange-500',
-    available: false,
+    available: true,
   },
   {
     id: 'quality',
@@ -74,10 +75,18 @@ const agentConfigs: AgentConfig[] = [
   {
     id: 'documentarist',
     name: 'Documentarist',
-    description: 'Catalogs assets by tracing from reports to sources',
+    description: 'Discovers and documents data assets automatically',
     icon: BookOpen,
     color: 'bg-purple-500',
-    available: false,
+    available: true,
+  },
+  {
+    id: 'operator',
+    name: 'Operator',
+    description: 'Executes approved changes to assets and issues',
+    icon: Settings2,
+    color: 'bg-indigo-500',
+    available: true,
   },
 ];
 
@@ -242,9 +251,18 @@ export default function AgentsPage() {
           </Card>
         )}
 
-        {/* Summary Stats */}
+        {/* Summary Stats - Clickable Tiles */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
+          <Card
+            className="cursor-pointer transition-all hover:shadow-md hover:border-green-300 dark:hover:border-green-700"
+            onClick={() => {
+              // Scroll to running agents or highlight them
+              const runningAgentElements = document.querySelectorAll('[data-running="true"]');
+              if (runningAgentElements.length > 0) {
+                runningAgentElements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }}
+          >
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
                 <div className="rounded-lg bg-green-100 p-2 dark:bg-green-900/30">
@@ -259,34 +277,38 @@ export default function AgentsPage() {
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30">
-                  <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <Link href="/dashboard/agents/runs">
+            <Card className="cursor-pointer transition-all hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30">
+                    <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                      {agentStats.spotter?.totalRuns || 0}
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Total Runs</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                    {agentStats.spotter?.totalRuns || 0}
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Total Runs</p>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link href="/dashboard/issues">
+            <Card className="cursor-pointer transition-all hover:shadow-md hover:border-yellow-300 dark:hover:border-yellow-700">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-yellow-100 p-2 dark:bg-yellow-900/30">
+                    <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-semibold text-gray-900 dark:text-white">{totalIssues}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Issues Created</p>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-yellow-100 p-2 dark:bg-yellow-900/30">
-                  <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-semibold text-gray-900 dark:text-white">{totalIssues}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Issues Created</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </Link>
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -312,7 +334,11 @@ export default function AgentsPage() {
             const isRunning = status === 'running';
 
             return (
-              <Card key={agent.id} className={`overflow-hidden ${!agent.available && 'opacity-60'}`}>
+              <Card
+                key={agent.id}
+                className={`overflow-hidden ${!agent.available && 'opacity-60'} ${isRunning && 'ring-2 ring-green-500 ring-offset-2 dark:ring-offset-gray-900'}`}
+                data-running={isRunning}
+              >
                 <div className={`h-1 ${agent.color}`} />
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between">
@@ -366,6 +392,14 @@ export default function AgentsPage() {
                       )}
                     </div>
                     <div className="flex gap-2">
+                      {/* Run History Button - show for all agents with stats */}
+                      {stats && stats.totalRuns > 0 && (
+                        <Link href={`/dashboard/agents/runs?agent=${agent.id}`}>
+                          <Button variant="ghost" size="sm" title="View run history">
+                            <History className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      )}
                       {agent.available ? (
                         isRunning ? (
                           <Button variant="outline" size="sm" disabled>
