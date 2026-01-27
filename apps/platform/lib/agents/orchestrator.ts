@@ -237,7 +237,7 @@ ${entityContextInfo}`;
           errorMessage = `Model error: ${error.message}`;
         } else {
           // Include the actual error message for debugging
-          errorMessage = `Error: ${error.message.slice(0, 200)}`;
+          errorMessage = `Debug - Error: ${error.name}: ${error.message.slice(0, 300)}`;
         }
       }
 
