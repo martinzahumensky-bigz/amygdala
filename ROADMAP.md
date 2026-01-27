@@ -149,6 +149,58 @@
 
 ---
 
+### FEAT-012: Ataccama Salesforce Data Integration
+**Status:** Planned
+**GitHub Issue:** TBD
+**Original Prompt:** "Add Ataccama Salesforce data to Meridian app to showcase real enterprise data patterns"
+
+**Purpose:** Demonstrate Amygdala with realistic enterprise CRM data patterns, showing how data trust issues manifest in Salesforce-like consumer data.
+
+**Key Components:**
+- [ ] Salesforce-style data model (Accounts, Contacts, Opportunities, Leads)
+- [ ] Realistic data quality issues (duplicate accounts, stale contacts, incomplete opportunities)
+- [ ] CRM-specific trust factors (data completeness, owner assignment, activity recency)
+- [ ] Salesforce-style reports and dashboards in Meridian app
+- [ ] Cross-system lineage (Salesforce → Meridian data warehouse)
+
+**Implementation Details:** See `docs/FEAT-012-SALESFORCE-SPEC.md`
+
+---
+
+### FEAT-013: Amygdala MCP Server - AI Agent Data Trust Layer
+**Status:** Planned
+**GitHub Issue:** TBD
+**Original Prompt:** "Showcase MCP integration with Claude demonstrating contrast between AI without vs with Amygdala"
+
+**Purpose:** Build an MCP server that provides AI agents with data trust context, demonstrating how Amygdala prevents AI hallucinations and incorrect data interpretation.
+
+**The Problem This Solves:**
+AI agents querying data today face critical issues:
+1. No awareness of data quality or active issues
+2. No understanding of data freshness or staleness
+3. Cannot distinguish trusted vs untrusted sources
+4. Present uncertain data with false confidence
+5. No feedback loop to report anomalies
+6. Miss business context and semantic meaning
+
+**Key Demo Scenarios:**
+- [ ] **Without Amygdala:** Claude queries revenue data, misses that yesterday's data is missing, gives confident but wrong answer
+- [ ] **With Amygdala:** Claude gets trust context, warns about data gap, suggests waiting for pipeline fix
+- [ ] **Without Amygdala:** Claude interprets branch codes literally, doesn't know some are test branches
+- [ ] **With Amygdala:** Claude knows business context, filters test data, explains data lineage
+
+**MCP Server Tools:**
+- [ ] `amygdala_query` - Query data with trust context injection
+- [ ] `amygdala_get_trust_score` - Get trust score for any asset
+- [ ] `amygdala_check_issues` - Check active issues affecting an asset
+- [ ] `amygdala_get_lineage` - Understand data provenance
+- [ ] `amygdala_report_anomaly` - Allow AI to report suspected issues
+- [ ] `amygdala_get_freshness` - Check when data was last updated
+
+**Implementation Details:** See `docs/FEAT-013-MCP-SERVER-SPEC.md`
+
+---
+
 ## MVP Phase (Weeks 4-8)
 
 ### FEAT-010: Quality Agent

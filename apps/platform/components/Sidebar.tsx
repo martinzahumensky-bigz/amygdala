@@ -24,6 +24,7 @@ import {
   Menu,
   X,
   Shield,
+  MessageSquare,
 } from 'lucide-react';
 
 interface NavItem {
@@ -42,6 +43,7 @@ const navigation: NavSection[] = [
   {
     items: [
       { name: 'Home', href: '/dashboard', icon: Home },
+      { name: 'Chat', href: '/dashboard/chat', icon: MessageSquare },
       { name: 'AI Agents', href: '/dashboard/agents', icon: Sparkles },
       { name: 'Search', href: '/dashboard/search', icon: Search },
       { name: 'Jobs', href: '/dashboard/jobs', icon: PlayCircle },
