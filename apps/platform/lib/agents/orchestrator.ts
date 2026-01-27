@@ -172,12 +172,25 @@ ${dataContext.recentIssuesSummary}
 ${entityContextInfo}`;
 
       // Call Claude
-      const response = await this.anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 1024,
-        system: enrichedPrompt,
-        messages,
-      });
+      console.log('Calling Anthropic API with model claude-3-5-sonnet-20241022...');
+      let response;
+      try {
+        response = await this.anthropic.messages.create({
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: 1024,
+          system: enrichedPrompt,
+          messages,
+        });
+        console.log('Anthropic API call successful');
+      } catch (apiError: any) {
+        console.error('Anthropic API error:', {
+          name: apiError?.name,
+          message: apiError?.message,
+          status: apiError?.status,
+          error: apiError?.error,
+        });
+        throw apiError;
+      }
 
       const textBlock = response.content.find((block) => block.type === 'text');
       const responseText = textBlock ? textBlock.text : 'I apologize, I could not process your request.';
