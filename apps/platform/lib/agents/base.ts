@@ -156,7 +156,7 @@ export abstract class BaseAgent {
   // Use Claude to analyze data
   protected async analyzeWithClaude(prompt: string, data: any): Promise<string> {
     const message = await this.anthropic.messages.create({
-      model: 'claude-3-5-sonnet-latest',
+      model: 'claude-3-sonnet-20240229',
       max_tokens: 2048,
       system: this.systemPrompt,
       messages: [

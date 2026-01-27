@@ -172,7 +172,7 @@ ${dataContext.recentIssuesSummary}
 ${entityContextInfo}`;
 
       // Call Claude using direct fetch for better error handling
-      console.log('Calling Anthropic API with model claude-3-5-sonnet-latest...');
+      console.log('Calling Anthropic API with model claude-3-sonnet-20240229...');
       const apiKey = process.env.ANTHROPIC_API_KEY;
 
       const fetchResponse = await fetch('https://api.anthropic.com/v1/messages', {
@@ -183,7 +183,7 @@ ${entityContextInfo}`;
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-3-5-sonnet-latest',
+          model: 'claude-3-sonnet-20240229',
           max_tokens: 1024,
           system: enrichedPrompt,
           messages,
