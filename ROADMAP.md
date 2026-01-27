@@ -149,6 +149,19 @@
 
 ---
 
+### FEAT-016: Orchestrator Agent Chat Interface
+**Status:** Completed
+
+- [x] Orchestrator agent with Claude API integration
+- [x] Chat API endpoint with conversation history
+- [x] Chat UI with message bubbles and suggestions
+- [x] Natural language queries for data quality
+- [x] Action markers for agent coordination
+- [x] Real-time data context injection
+- [x] Sidebar navigation link
+
+---
+
 ### FEAT-012: Ataccama Salesforce Data Integration
 **Status:** Planned
 **GitHub Issue:** TBD
@@ -201,6 +214,76 @@ AI agents querying data today face critical issues:
 
 ---
 
+### FEAT-014: Visual Spotter & Data Trust Bubble
+**Status:** Planned
+**GitHub Issue:** TBD
+**Original Prompt:** "Create a data trust bot embedded in applications that looks at UI like a human and validates data visually"
+
+**Purpose:** Extend Spotter to look at data the way humans do—through the actual UI—instead of only querying databases.
+
+**The Problem:**
+- Current Spotter only queries database
+- Database truth ≠ Presentation truth (what users SEE)
+- Users distrust data based on visual anomalies (missing charts, "[Unknown]" labels, stale dates)
+
+**Solution: Chrome Extension + Floating Widget**
+- **Data Trust Bubble** - Floating widget like 100sharp.com showing real-time trust score
+- **Visual Scanner** - AI-powered DOM analysis to detect visual anomalies
+- **Click-Through Validation** - Navigate UI like a human to validate data
+- **Issue Reporting** - Let users report issues directly from the bubble
+
+**Key Features:**
+- [ ] Chrome extension with content script for DOM reading
+- [ ] Floating "eye" widget showing trust score (green/amber/red)
+- [ ] Visual anomaly detection (missing data, "[Unknown]", errors)
+- [ ] Claude-powered screenshot analysis for complex anomalies
+- [ ] Click-through validation using Chrome DevTools Protocol
+- [ ] User issue reporting with auto-captured context
+- [ ] Real-time trust updates as page changes
+
+**Implementation Details:** See `docs/FEAT-014-VISUAL-SPOTTER-SPEC.md`
+
+---
+
+### FEAT-015: Mastering Agent
+**Status:** Planned
+**GitHub Issue:** TBD
+**Original Prompt:** "Create agent to match and merge data from different sources like Salesforce + HubSpot"
+
+**Purpose:** AI-powered data matching, merging, and deduplication that automatically devises matching rules based on profiling.
+
+**The Problem:**
+- Manual data matching is painful (export → Excel → VLOOKUP → manual review)
+- Name variations cause false negatives ("Acme Corp" vs "ACME Corporation")
+- No confidence scores on matches
+- No lineage after merge
+
+**Solution: Conversation-Driven Matching**
+```
+User: "Match Salesforce accounts with HubSpot companies"
+
+Mastering Agent:
+1. Profiles both sources
+2. Devises matching strategy (domain → fuzzy name → phone)
+3. Executes matching with confidence scores
+4. Presents results for review
+5. Creates golden master records with full lineage
+```
+
+**Key Features:**
+- [ ] Natural language job initiation
+- [ ] Automatic source profiling (fill rate, patterns, semantic types)
+- [ ] AI rule generation based on profiling
+- [ ] Multi-stage matching (exact → fuzzy → probabilistic)
+- [ ] Interactive match review UI
+- [ ] Duplicate detection within single source
+- [ ] Survivorship rules for golden record construction
+- [ ] Full lineage tracking
+
+**Implementation Details:** See `docs/FEAT-015-MASTERING-AGENT-SPEC.md`
+
+---
+
 ## MVP Phase (Weeks 4-8)
 
 ### FEAT-010: Quality Agent
@@ -234,3 +317,4 @@ AI agents querying data today face critical issues:
 | FEAT-008 | Meridian Bank Reports | 2026-01-23 |
 | FEAT-010 | Data Trust Index | 2026-01-27 |
 | FEAT-011 | Home Dashboard Widgets | 2026-01-27 |
+| FEAT-016 | Orchestrator Agent Chat Interface | 2026-01-27 |
