@@ -194,18 +194,28 @@ ${entityContextInfo}`;
       let errorMessage = 'I encountered an error processing your request. Please try again.';
 
       if (error instanceof Error) {
+        // Log the full error for debugging
+        console.error('Full error details:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack?.slice(0, 500),
+        });
+
         // Check for common error types
-        if (error.message.includes('API key')) {
+        if (error.message.includes('API key') || error.message.includes('401') || error.message.includes('authentication')) {
           errorMessage = 'The AI service is not configured properly. Please check the API key configuration.';
-        } else if (error.message.includes('rate limit')) {
+        } else if (error.message.includes('rate limit') || error.message.includes('429')) {
           errorMessage = 'The AI service is currently busy. Please try again in a moment.';
-        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+        } else if (error.message.includes('network') || error.message.includes('fetch') || error.message.includes('ECONNREFUSED')) {
           errorMessage = 'Unable to connect to the AI service. Please check your connection.';
         } else if (error.message.includes('timeout')) {
           errorMessage = 'The request timed out. Please try again.';
+        } else if (error.message.includes('model')) {
+          errorMessage = `Model error: ${error.message}`;
+        } else {
+          // Include the actual error message for debugging
+          errorMessage = `Error: ${error.message.slice(0, 200)}`;
         }
-
-        console.error('Error details:', error.message);
       }
 
       return {
