@@ -171,26 +171,33 @@ Recent Issues:
 ${dataContext.recentIssuesSummary}
 ${entityContextInfo}`;
 
-      // Call Claude
+      // Call Claude using direct fetch for better error handling
       console.log('Calling Anthropic API with model claude-3-5-sonnet-20241022...');
-      let response;
-      try {
-        response = await this.anthropic.messages.create({
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+
+      const fetchResponse = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey || '',
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
           model: 'claude-3-5-sonnet-20241022',
           max_tokens: 1024,
           system: enrichedPrompt,
           messages,
-        });
-        console.log('Anthropic API call successful');
-      } catch (apiError: any) {
-        console.error('Anthropic API error:', {
-          name: apiError?.name,
-          message: apiError?.message,
-          status: apiError?.status,
-          error: apiError?.error,
-        });
-        throw apiError;
+        }),
+      });
+
+      if (!fetchResponse.ok) {
+        const errorText = await fetchResponse.text();
+        console.error('Anthropic API error:', fetchResponse.status, errorText);
+        throw new Error(`Anthropic API error ${fetchResponse.status}: ${errorText.slice(0, 200)}`);
       }
+
+      const response = await fetchResponse.json();
+      console.log('Anthropic API call successful');
 
       const textBlock = response.content.find((block) => block.type === 'text');
       const responseText = textBlock ? textBlock.text : 'I apologize, I could not process your request.';
