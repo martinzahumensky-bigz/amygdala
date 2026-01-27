@@ -83,12 +83,11 @@ export class OrchestratorAgent {
 
   constructor() {
     const apiKey = process.env.ANTHROPIC_API_KEY;
-    console.log('Anthropic API key status:', apiKey ? `Set (${apiKey.slice(0, 10)}...)` : 'NOT SET');
     if (!apiKey) {
       console.error('ANTHROPIC_API_KEY is not set - chat will not work');
     }
     this.anthropic = new Anthropic({
-      apiKey: apiKey || 'missing-api-key',
+      apiKey: apiKey || '',
     });
   }
 
@@ -171,8 +170,7 @@ Recent Issues:
 ${dataContext.recentIssuesSummary}
 ${entityContextInfo}`;
 
-      // Call Claude using direct fetch for better error handling
-      console.log('Calling Anthropic API with model claude-3-sonnet-20240229...');
+      // Call Claude API
       const apiKey = process.env.ANTHROPIC_API_KEY;
 
       const fetchResponse = await fetch('https://api.anthropic.com/v1/messages', {
@@ -193,11 +191,10 @@ ${entityContextInfo}`;
       if (!fetchResponse.ok) {
         const errorText = await fetchResponse.text();
         console.error('Anthropic API error:', fetchResponse.status, errorText);
-        throw new Error(`Anthropic API error ${fetchResponse.status}: ${errorText.slice(0, 200)}`);
+        throw new Error(`API error ${fetchResponse.status}: ${errorText.slice(0, 100)}`);
       }
 
       const response = await fetchResponse.json();
-      console.log('Anthropic API call successful');
 
       const textBlock = response.content.find((block) => block.type === 'text');
       const responseText = textBlock ? textBlock.text : 'I apologize, I could not process your request.';
@@ -220,31 +217,17 @@ ${entityContextInfo}`;
     } catch (error) {
       console.error('Orchestrator error:', error);
 
-      // Provide more detailed error message
       let errorMessage = 'I encountered an error processing your request. Please try again.';
 
       if (error instanceof Error) {
-        // Log the full error for debugging
-        console.error('Full error details:', {
-          name: error.name,
-          message: error.message,
-          stack: error.stack?.slice(0, 500),
-        });
-
-        // Check for common error types
-        if (error.message.includes('API key') || error.message.includes('401') || error.message.includes('authentication')) {
-          errorMessage = 'The AI service is not configured properly. Please check the API key configuration.';
+        if (error.message.includes('API key') || error.message.includes('401')) {
+          errorMessage = 'The AI service is not configured properly. Please check the API key.';
         } else if (error.message.includes('rate limit') || error.message.includes('429')) {
-          errorMessage = 'The AI service is currently busy. Please try again in a moment.';
-        } else if (error.message.includes('network') || error.message.includes('fetch') || error.message.includes('ECONNREFUSED')) {
-          errorMessage = 'Unable to connect to the AI service. Please check your connection.';
-        } else if (error.message.includes('timeout')) {
-          errorMessage = 'The request timed out. Please try again.';
-        } else if (error.message.includes('model')) {
-          errorMessage = `Model error: ${error.message}`;
-        } else {
-          // Include the actual error message for debugging
-          errorMessage = `Debug - Error: ${error.name}: ${error.message.slice(0, 300)}`;
+          errorMessage = 'The AI service is busy. Please try again in a moment.';
+        } else if (error.message.includes('Connection error')) {
+          errorMessage = 'Unable to connect to the AI service.';
+        } else if (error.message.includes('404') || error.message.includes('model')) {
+          errorMessage = 'AI model configuration error. Please contact support.';
         }
       }
 
