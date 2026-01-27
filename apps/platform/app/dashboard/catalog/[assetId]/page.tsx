@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { Card, CardContent, Badge, Button } from '@amygdala/ui';
 import Link from 'next/link';
+import { useChat } from '@/contexts/ChatContext';
 import {
   Database,
   ArrowLeft,
@@ -27,6 +28,11 @@ import {
   RefreshCw,
   Users,
   Activity,
+  GitBranch,
+  Code2,
+  ChevronDown,
+  ChevronUp,
+  Workflow,
 } from 'lucide-react';
 
 interface Asset {
@@ -101,44 +107,63 @@ const factorIcons: Record<string, any> = {
   Freshness: RefreshCw,
 };
 
-function TrustFactorBreakdown({ factors }: { factors: TrustFactor[] }) {
+function TrustFactorBreakdown({
+  factors,
+  onFixFactor
+}: {
+  factors: TrustFactor[];
+  onFixFactor?: (factor: TrustFactor) => void;
+}) {
+  const statusColors = {
+    green: 'text-green-500',
+    amber: 'text-yellow-500',
+    red: 'text-red-500',
+  };
+  const barColors = {
+    green: 'bg-green-500',
+    amber: 'bg-yellow-500',
+    red: 'bg-red-500',
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 pl-4 border-l-2 border-purple-200 dark:border-purple-800">
       {factors.map((factor) => {
         const Icon = factorIcons[factor.name] || BarChart3;
-        const statusColors = {
-          green: 'text-green-500',
-          amber: 'text-yellow-500',
-          red: 'text-red-500',
-        };
-        const barColors = {
-          green: 'bg-green-500',
-          amber: 'bg-yellow-500',
-          red: 'bg-red-500',
-        };
 
         return (
-          <div key={factor.name} className="space-y-2">
+          <div key={factor.name} className="space-y-1.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Icon className={`h-4 w-4 ${statusColors[factor.status]}`} />
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                <Icon className={`h-3.5 w-3.5 ${statusColors[factor.status]}`} />
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
                   {factor.name}
                 </span>
                 <span className="text-xs text-gray-400">({factor.weight}%)</span>
               </div>
-              <span className={`text-sm font-semibold ${statusColors[factor.status]}`}>
-                {factor.score.toFixed(0)}%
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={`text-sm font-semibold ${statusColors[factor.status]}`}>
+                  {factor.score.toFixed(0)}%
+                </span>
+                {factor.recommendation && onFixFactor && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                    onClick={() => onFixFactor(factor)}
+                  >
+                    Fix
+                  </Button>
+                )}
+              </div>
             </div>
-            <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+            <div className="h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
               <div
                 className={`h-full rounded-full ${barColors[factor.status]} transition-all duration-300`}
                 style={{ width: `${factor.score}%` }}
               />
             </div>
             {factor.recommendation && (
-              <p className="text-xs text-gray-500 dark:text-gray-400 italic">
+              <p className="text-xs text-gray-500 dark:text-gray-400 pl-5">
                 {factor.recommendation}
               </p>
             )}
@@ -166,6 +191,270 @@ function StarRating({ stars }: { stars: number }) {
   );
 }
 
+interface PipelineInfo {
+  id: string;
+  name: string;
+  description?: string;
+  source_table?: string;
+  target_table?: string;
+  schedule?: string;
+  is_active: boolean;
+  transformation_logic?: string;
+}
+
+interface LineageData {
+  upstream: { assets: LineageAsset[]; pipelines: PipelineInfo[] };
+  downstream: { assets: LineageAsset[]; pipelines: PipelineInfo[] };
+}
+
+function LineageCard({
+  asset,
+  lineage,
+  layerColors,
+}: {
+  asset: Asset;
+  lineage: { upstream: LineageAsset[]; downstream: LineageAsset[] };
+  layerColors: Record<string, string>;
+}) {
+  const [expandedPipeline, setExpandedPipeline] = useState<string | null>(null);
+  const [lineageData, setLineageData] = useState<LineageData | null>(null);
+  const [isLoadingLineage, setIsLoadingLineage] = useState(false);
+
+  // Fetch detailed lineage with pipeline info
+  useEffect(() => {
+    const fetchLineage = async () => {
+      setIsLoadingLineage(true);
+      try {
+        const res = await fetch(`/api/assets/${asset.id}/lineage`);
+        if (res.ok) {
+          const data = await res.json();
+          setLineageData(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch lineage:', err);
+      } finally {
+        setIsLoadingLineage(false);
+      }
+    };
+    fetchLineage();
+  }, [asset.id]);
+
+  const upstreamAssets = lineageData?.upstream?.assets || lineage.upstream;
+  const downstreamAssets = lineageData?.downstream?.assets || lineage.downstream;
+  const incomingPipelines = lineageData?.upstream?.pipelines || [];
+  const outgoingPipelines = lineageData?.downstream?.pipelines || [];
+
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+          <GitBranch className="h-5 w-5 text-blue-500" />
+          Data Lineage & Pipelines
+          {isLoadingLineage && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+        </h3>
+
+        {/* Visual Flow Diagram */}
+        <div className="grid md:grid-cols-3 gap-4 mb-6">
+          {/* Upstream Sources */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-2">
+              <ArrowDownRight className="h-4 w-4" />
+              Upstream Sources ({upstreamAssets.length})
+            </h4>
+            {upstreamAssets.length > 0 ? (
+              <div className="space-y-2">
+                {upstreamAssets.map((upAsset) => (
+                  <Link
+                    key={upAsset.id || upAsset.name}
+                    href={upAsset.id ? `/dashboard/catalog/${upAsset.id}` : '#'}
+                    className="block p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 transition-colors bg-white dark:bg-gray-800"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900 dark:text-white text-sm">
+                        {upAsset.name}
+                      </span>
+                      <div
+                        className={`w-2 h-2 rounded-full ${
+                          upAsset.fitness_status === 'green'
+                            ? 'bg-green-500'
+                            : upAsset.fitness_status === 'amber'
+                            ? 'bg-yellow-500'
+                            : 'bg-red-500'
+                        }`}
+                      />
+                    </div>
+                    <Badge className={`mt-1 text-xs ${layerColors[upAsset.layer] || ''}`}>
+                      {upAsset.layer}
+                    </Badge>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 text-center">
+                <p className="text-sm text-gray-400 italic">No upstream sources</p>
+                <p className="text-xs text-gray-400 mt-1">This may be a source table</p>
+              </div>
+            )}
+          </div>
+
+          {/* Current Asset with Pipelines */}
+          <div className="flex flex-col items-center justify-center">
+            {/* Incoming Pipeline Arrow */}
+            {incomingPipelines.length > 0 && (
+              <div className="mb-2 text-center">
+                <div className="flex items-center justify-center gap-1 text-xs text-blue-500">
+                  <Workflow className="h-3 w-3" />
+                  <span className="font-mono">{incomingPipelines[0]?.name}</span>
+                </div>
+                <ArrowDownRight className="h-5 w-5 text-blue-400 mx-auto" />
+              </div>
+            )}
+
+            {/* Current Asset Box */}
+            <div className="p-4 rounded-lg border-2 border-purple-500 bg-purple-50 dark:bg-purple-900/20 text-center min-w-[150px]">
+              <Database className="h-8 w-8 mx-auto text-purple-500 mb-2" />
+              <p className="font-semibold text-gray-900 dark:text-white text-sm">{asset.name}</p>
+              <Badge className={`mt-1 ${layerColors[asset.layer]}`}>{asset.layer}</Badge>
+            </div>
+
+            {/* Outgoing Pipeline Arrow */}
+            {outgoingPipelines.length > 0 && (
+              <div className="mt-2 text-center">
+                <ArrowUpRight className="h-5 w-5 text-green-400 mx-auto" />
+                <div className="flex items-center justify-center gap-1 text-xs text-green-500">
+                  <Workflow className="h-3 w-3" />
+                  <span className="font-mono">{outgoingPipelines[0]?.name}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Downstream Consumers */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-2">
+              <ArrowUpRight className="h-4 w-4" />
+              Downstream Consumers ({downstreamAssets.length})
+            </h4>
+            {downstreamAssets.length > 0 ? (
+              <div className="space-y-2">
+                {downstreamAssets.map((downAsset) => (
+                  <Link
+                    key={downAsset.id || downAsset.name}
+                    href={downAsset.id ? `/dashboard/catalog/${downAsset.id}` : '#'}
+                    className="block p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-green-300 dark:hover:border-green-600 transition-colors bg-white dark:bg-gray-800"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900 dark:text-white text-sm">
+                        {downAsset.name}
+                      </span>
+                      <div
+                        className={`w-2 h-2 rounded-full ${
+                          downAsset.fitness_status === 'green'
+                            ? 'bg-green-500'
+                            : downAsset.fitness_status === 'amber'
+                            ? 'bg-yellow-500'
+                            : 'bg-red-500'
+                        }`}
+                      />
+                    </div>
+                    <Badge className={`mt-1 text-xs ${layerColors[downAsset.layer] || ''}`}>
+                      {downAsset.layer}
+                    </Badge>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 text-center">
+                <p className="text-sm text-gray-400 italic">No downstream consumers</p>
+                <p className="text-xs text-gray-400 mt-1">This may be a terminal asset</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Pipeline Details */}
+        {(incomingPipelines.length > 0 || outgoingPipelines.length > 0) && (
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+              <Code2 className="h-4 w-4" />
+              Transformation Pipelines
+            </h4>
+            <div className="space-y-2">
+              {[...incomingPipelines, ...outgoingPipelines].map((pipeline) => (
+                <div
+                  key={pipeline.id}
+                  className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
+                >
+                  <button
+                    onClick={() =>
+                      setExpandedPipeline(expandedPipeline === pipeline.id ? null : pipeline.id)
+                    }
+                    className="w-full p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Workflow className="h-4 w-4 text-blue-500" />
+                      <div className="text-left">
+                        <p className="font-medium text-gray-900 dark:text-white text-sm">
+                          {pipeline.name}
+                        </p>
+                        <p className="text-xs text-gray-500">{pipeline.description}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {pipeline.schedule && (
+                        <Badge variant="outline" className="text-xs">
+                          <Clock className="h-3 w-3 mr-1" />
+                          {pipeline.schedule}
+                        </Badge>
+                      )}
+                      {pipeline.is_active ? (
+                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs">
+                          Active
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400 text-xs">
+                          Inactive
+                        </Badge>
+                      )}
+                      {expandedPipeline === pipeline.id ? (
+                        <ChevronUp className="h-4 w-4 text-gray-400" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-gray-400" />
+                      )}
+                    </div>
+                  </button>
+                  {expandedPipeline === pipeline.id && pipeline.transformation_logic && (
+                    <div className="border-t border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-800/50">
+                      <p className="text-xs text-gray-500 mb-2 font-medium">Transformation Logic:</p>
+                      <pre className="text-xs text-gray-700 dark:text-gray-300 overflow-x-auto p-3 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 font-mono">
+                        {pipeline.transformation_logic}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* No lineage message */}
+        {upstreamAssets.length === 0 &&
+          downstreamAssets.length === 0 &&
+          incomingPipelines.length === 0 &&
+          outgoingPipelines.length === 0 && (
+            <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+              <GitBranch className="h-10 w-10 mx-auto text-gray-300 dark:text-gray-600 mb-2" />
+              <p className="text-sm">No lineage information available</p>
+              <p className="text-xs mt-1">
+                Run the Documentarist agent to discover data lineage
+              </p>
+            </div>
+          )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AssetDetailPage({
   params,
 }: {
@@ -173,6 +462,7 @@ export default function AssetDetailPage({
 }) {
   const { assetId } = use(params);
   const router = useRouter();
+  const { openChat } = useChat();
   const [data, setData] = useState<AssetDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -274,12 +564,21 @@ export default function AssetDetailPage({
                 Back
               </Button>
             </Link>
-            <Link href={`/dashboard/chat?context=asset&id=${asset.id}`}>
-              <Button size="sm" className="gap-2">
-                <MessageSquare className="h-4 w-4" />
-                Ask AI
-              </Button>
-            </Link>
+            <Button
+              size="sm"
+              className="gap-2"
+              onClick={() =>
+                openChat({
+                  type: 'asset',
+                  id: asset.id,
+                  title: asset.name,
+                  prefilledPrompt: `Tell me about the data asset "${asset.name}" - its purpose, quality status, and any recommendations for improvement.`,
+                })
+              }
+            >
+              <MessageSquare className="h-4 w-4" />
+              Ask AI
+            </Button>
           </div>
         }
       />
@@ -363,29 +662,49 @@ export default function AssetDetailPage({
                 <BarChart3 className="h-5 w-5 text-purple-500" />
                 Trust Index Breakdown
               </h3>
-              <div className="mb-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+
+              {/* Overall Trust Score - Full Width Header */}
+              <div className="mb-5">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <span className="text-base font-semibold text-gray-900 dark:text-white">
                     Overall Trust Score
                   </span>
                   <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">
                     {trustBreakdown.overall.toFixed(0)}%
                   </span>
                 </div>
-                <div className="h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                <div className="h-4 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
                       trustBreakdown.overall >= 70
-                        ? 'bg-green-500'
+                        ? 'bg-gradient-to-r from-green-500 to-green-400'
                         : trustBreakdown.overall >= 40
-                        ? 'bg-yellow-500'
-                        : 'bg-red-500'
+                        ? 'bg-gradient-to-r from-yellow-500 to-yellow-400'
+                        : 'bg-gradient-to-r from-red-500 to-red-400'
                     }`}
                     style={{ width: `${trustBreakdown.overall}%` }}
                   />
                 </div>
               </div>
-              <TrustFactorBreakdown factors={trustBreakdown.factors} />
+
+              {/* Factor Breakdown - Indented under overall */}
+              <div className="mt-4">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 uppercase tracking-wide font-medium">
+                  Factor Breakdown
+                </p>
+                <TrustFactorBreakdown
+                  factors={trustBreakdown.factors}
+                  onFixFactor={(factor) => {
+                    openChat({
+                      type: 'asset',
+                      id: asset.id,
+                      title: asset.name,
+                      prefilledPrompt: `Help me improve the ${factor.name} score for "${asset.name}". Current score: ${factor.score.toFixed(0)}%. ${factor.recommendation || ''}`,
+                      autoSend: true,
+                    });
+                  }}
+                />
+              </div>
             </CardContent>
           </Card>
 
@@ -439,98 +758,7 @@ export default function AssetDetailPage({
         </div>
 
         {/* Lineage */}
-        <Card>
-          <CardContent className="p-5">
-            <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-              <ArrowRight className="h-5 w-5 text-blue-500" />
-              Data Lineage
-            </h3>
-            <div className="grid md:grid-cols-3 gap-6">
-              {/* Upstream */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3 flex items-center gap-2">
-                  <ArrowDownRight className="h-4 w-4" />
-                  Upstream Sources ({lineage.upstream.length})
-                </h4>
-                {lineage.upstream.length > 0 ? (
-                  <div className="space-y-2">
-                    {lineage.upstream.map((asset) => (
-                      <Link
-                        key={asset.id}
-                        href={`/dashboard/catalog/${asset.id}`}
-                        className="block p-2 rounded border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 text-sm"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-gray-900 dark:text-white">
-                            {asset.name}
-                          </span>
-                          <div
-                            className={`w-2 h-2 rounded-full ${
-                              asset.fitness_status === 'green'
-                                ? 'bg-green-500'
-                                : asset.fitness_status === 'amber'
-                                ? 'bg-yellow-500'
-                                : 'bg-red-500'
-                            }`}
-                          />
-                        </div>
-                        <span className="text-xs text-gray-500">{asset.layer}</span>
-                      </Link>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-400 italic">No upstream sources</p>
-                )}
-              </div>
-
-              {/* Current Asset */}
-              <div className="flex items-center justify-center">
-                <div className="p-4 rounded-lg border-2 border-purple-500 bg-purple-50 dark:bg-purple-900/20 text-center">
-                  <Database className="h-8 w-8 mx-auto text-purple-500 mb-2" />
-                  <p className="font-semibold text-gray-900 dark:text-white">{asset.name}</p>
-                  <Badge className={layerColors[asset.layer]}>{asset.layer}</Badge>
-                </div>
-              </div>
-
-              {/* Downstream */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3 flex items-center gap-2">
-                  <ArrowUpRight className="h-4 w-4" />
-                  Downstream Consumers ({lineage.downstream.length})
-                </h4>
-                {lineage.downstream.length > 0 ? (
-                  <div className="space-y-2">
-                    {lineage.downstream.map((asset) => (
-                      <Link
-                        key={asset.id}
-                        href={`/dashboard/catalog/${asset.id}`}
-                        className="block p-2 rounded border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 text-sm"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-gray-900 dark:text-white">
-                            {asset.name}
-                          </span>
-                          <div
-                            className={`w-2 h-2 rounded-full ${
-                              asset.fitness_status === 'green'
-                                ? 'bg-green-500'
-                                : asset.fitness_status === 'amber'
-                                ? 'bg-yellow-500'
-                                : 'bg-red-500'
-                            }`}
-                          />
-                        </div>
-                        <span className="text-xs text-gray-500">{asset.layer}</span>
-                      </Link>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-400 italic">No downstream consumers</p>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <LineageCard asset={asset} lineage={lineage} layerColors={layerColors} />
 
         {/* Sample Data */}
         {sampleData.rows.length > 0 && (
@@ -601,11 +829,22 @@ export default function AssetDetailPage({
                     </div>
                     <div className="flex-1 flex items-center justify-between">
                       <p className="text-sm text-gray-700 dark:text-gray-300">{rec}</p>
-                      <Link href={`/dashboard/chat?context=asset&id=${asset.id}&prompt=${encodeURIComponent(rec)}`}>
-                        <Button variant="ghost" size="sm" className="text-purple-600 hover:text-purple-700">
-                          Fix with AI
-                        </Button>
-                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-purple-600 hover:text-purple-700"
+                        onClick={() =>
+                          openChat({
+                            type: 'recommendation',
+                            id: asset.id,
+                            title: asset.name,
+                            prefilledPrompt: `Help me implement this recommendation for "${asset.name}": ${rec}`,
+                            autoSend: true,
+                          })
+                        }
+                      >
+                        Fix with AI
+                      </Button>
                     </div>
                   </li>
                 ))}

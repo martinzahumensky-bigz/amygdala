@@ -7,6 +7,7 @@ export interface ChatOpenOptions {
   id?: string;
   prefilledPrompt?: string;
   title?: string;
+  autoSend?: boolean; // Automatically send the prefilled prompt
 }
 
 interface ChatContextValue {

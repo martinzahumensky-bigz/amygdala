@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { Card, CardContent, Badge, Button, Dropdown } from '@amygdala/ui';
+import { useChat } from '@/contexts/ChatContext';
 import Link from 'next/link';
 import {
   AlertTriangle,
@@ -139,6 +140,7 @@ export default function IssueDetailPage({
 }) {
   const { issueId } = use(params);
   const router = useRouter();
+  const { openChat } = useChat();
   const [data, setData] = useState<IssueDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -266,12 +268,21 @@ export default function IssueDetailPage({
                 Back
               </Button>
             </Link>
-            <Link href={`/dashboard/chat?context=issue&id=${issue.id}`}>
-              <Button size="sm" className="gap-2">
-                <MessageSquare className="h-4 w-4" />
-                Open in Chat
-              </Button>
-            </Link>
+            <Button
+              size="sm"
+              className="gap-2"
+              onClick={() =>
+                openChat({
+                  type: 'issue',
+                  id: issue.id,
+                  title: issue.title,
+                  prefilledPrompt: `Help me understand and resolve this ${issue.severity} severity issue: "${issue.title}". The issue type is ${issue.issue_type.replace('_', ' ')}.`,
+                })
+              }
+            >
+              <MessageSquare className="h-4 w-4" />
+              Open in Chat
+            </Button>
           </div>
         }
       />
@@ -552,12 +563,21 @@ export default function IssueDetailPage({
           <CardContent className="p-5">
             <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h3>
             <div className="flex flex-wrap gap-3">
-              <Link href={`/dashboard/chat?context=issue&id=${issue.id}`}>
-                <Button className="gap-2">
-                  <Wrench className="h-4 w-4" />
-                  Analyze with Debugger
-                </Button>
-              </Link>
+              <Button
+                className="gap-2"
+                onClick={() =>
+                  openChat({
+                    type: 'issue',
+                    id: issue.id,
+                    title: issue.title,
+                    prefilledPrompt: `Analyze this issue with the Debugger agent: "${issue.title}". Investigate the root cause and propose a solution.`,
+                    autoSend: true,
+                  })
+                }
+              >
+                <Wrench className="h-4 w-4" />
+                Analyze with Debugger
+              </Button>
               <Button variant="outline" className="gap-2" onClick={() => updateStatus('investigating')}>
                 <User className="h-4 w-4" />
                 Assign to Me

@@ -37,6 +37,25 @@ interface DocumentaristResult {
   assetsUpdated: number;
   ownershipIssuesCreated: number;
   profilesGenerated: number;
+  lineageRelationshipsFound: number;
+}
+
+interface PipelineInfo {
+  id: string;
+  name: string;
+  description?: string;
+  source_table: string;
+  target_table: string;
+  schedule?: string;
+  is_active: boolean;
+}
+
+interface LineageRelationship {
+  sourceAsset: string;
+  targetAsset: string;
+  relationshipType: 'pipeline' | 'inferred' | 'foreign_key';
+  pipelineName?: string;
+  confidence: 'high' | 'medium' | 'low';
 }
 
 export class DocumentaristAgent extends BaseAgent {
@@ -82,6 +101,7 @@ Always respond with a JSON object containing:
       assetsUpdated: 0,
       ownershipIssuesCreated: 0,
       profilesGenerated: 0,
+      lineageRelationshipsFound: 0,
     };
 
     const runId = await this.startRun(context);
@@ -171,9 +191,25 @@ Always respond with a JSON object containing:
         }
       }
 
+      // Step 5: Analyze lineage relationships
+      await this.log('lineage_analysis', 'Starting lineage analysis from pipelines and naming conventions');
+
+      const lineageRelationships = await this.analyzeLineage(targetSchema, discoveredAssets.map(a => a.name));
+      stats.lineageRelationshipsFound = lineageRelationships.length;
+
+      // Update assets with lineage information
+      for (const relationship of lineageRelationships) {
+        try {
+          await this.updateAssetLineage(relationship);
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          await this.log('lineage_update_error', `Failed to update lineage: ${errorMsg}`);
+        }
+      }
+
       await this.log(
         'run_completed',
-        `Documentarist completed: ${stats.assetsCreated} new, ${stats.assetsUpdated} updated, ${stats.ownershipIssuesCreated} ownership issues`,
+        `Documentarist completed: ${stats.assetsCreated} new, ${stats.assetsUpdated} updated, ${stats.ownershipIssuesCreated} ownership issues, ${stats.lineageRelationshipsFound} lineage relationships`,
         stats
       );
 
@@ -216,12 +252,25 @@ Always respond with a JSON object containing:
     // Since we can't query information_schema directly via Supabase client,
     // we'll use a hardcoded list of known Meridian tables
     const knownTables: TableInfo[] = [
+      // Reference tables
       { table_name: 'ref_branches', table_type: 'BASE TABLE' },
+      { table_name: 'ref_products', table_type: 'BASE TABLE' },
+      { table_name: 'ref_customer_segments', table_type: 'BASE TABLE' },
+      // Bronze layer (raw data)
+      { table_name: 'bronze_customers', table_type: 'BASE TABLE' },
+      { table_name: 'bronze_transactions', table_type: 'BASE TABLE' },
+      { table_name: 'bronze_loans', table_type: 'BASE TABLE' },
+      { table_name: 'bronze_accounts', table_type: 'BASE TABLE' },
+      // Silver layer (cleansed)
       { table_name: 'silver_customers', table_type: 'BASE TABLE' },
       { table_name: 'silver_transactions', table_type: 'BASE TABLE' },
       { table_name: 'silver_loans', table_type: 'BASE TABLE' },
+      { table_name: 'silver_accounts', table_type: 'BASE TABLE' },
+      // Gold layer (aggregated)
       { table_name: 'gold_daily_revenue', table_type: 'BASE TABLE' },
       { table_name: 'gold_branch_metrics', table_type: 'BASE TABLE' },
+      { table_name: 'gold_loan_summary', table_type: 'BASE TABLE' },
+      { table_name: 'gold_customer_360', table_type: 'BASE TABLE' },
     ];
 
     return knownTables;
@@ -590,6 +639,272 @@ Always respond with a JSON object containing:
     };
 
     await this.createIssue(issue);
+  }
+
+  // ========== LINEAGE ANALYSIS METHODS ==========
+
+  private async analyzeLineage(schema: string, assetNames: string[]): Promise<LineageRelationship[]> {
+    const relationships: LineageRelationship[] = [];
+
+    // 1. Get pipeline definitions from Meridian
+    const pipelines = await this.getPipelines();
+    await this.log('pipelines_found', `Found ${pipelines.length} pipeline definitions`, {
+      pipelines: pipelines.map(p => p.name),
+    });
+
+    // 2. Create relationships from pipelines
+    for (const pipeline of pipelines) {
+      if (pipeline.source_table && pipeline.target_table) {
+        const sourceTable = pipeline.source_table.replace(`${schema}.`, '');
+        const targetTable = pipeline.target_table.replace(`${schema}.`, '');
+
+        relationships.push({
+          sourceAsset: sourceTable,
+          targetAsset: targetTable,
+          relationshipType: 'pipeline',
+          pipelineName: pipeline.name,
+          confidence: 'high',
+        });
+
+        await this.log('pipeline_relationship', `Pipeline "${pipeline.name}": ${sourceTable} → ${targetTable}`);
+      }
+    }
+
+    // 3. Infer additional relationships from naming conventions
+    const inferredRelationships = this.inferLineageFromNaming(assetNames);
+    relationships.push(...inferredRelationships);
+
+    await this.log('inferred_relationships', `Inferred ${inferredRelationships.length} relationships from naming conventions`);
+
+    // 4. Store pipeline metadata for UI
+    await this.storePipelineMetadata(pipelines);
+
+    return relationships;
+  }
+
+  private async getPipelines(): Promise<PipelineInfo[]> {
+    try {
+      const { data, error } = await this.meridianClient
+        .from('pipelines')
+        .select('*');
+
+      if (error) {
+        await this.log('pipeline_fetch_error', `Failed to fetch pipelines: ${error.message}`);
+        return this.getDefaultPipelines();
+      }
+
+      return (data || []) as PipelineInfo[];
+    } catch {
+      // Return hardcoded pipelines if table doesn't exist
+      return this.getDefaultPipelines();
+    }
+  }
+
+  private getDefaultPipelines(): PipelineInfo[] {
+    // Default pipeline definitions based on Meridian data flow
+    return [
+      {
+        id: 'pl-001',
+        name: 'bronze_to_silver_customers',
+        description: 'Cleanses customer data: validates emails, normalizes phones, calculates age',
+        source_table: 'meridian.bronze_customers',
+        target_table: 'meridian.silver_customers',
+        schedule: 'hourly',
+        is_active: true,
+      },
+      {
+        id: 'pl-002',
+        name: 'bronze_to_silver_transactions',
+        description: 'Enriches transactions with branch details and validates data',
+        source_table: 'meridian.bronze_transactions',
+        target_table: 'meridian.silver_transactions',
+        schedule: 'hourly',
+        is_active: true,
+      },
+      {
+        id: 'pl-003',
+        name: 'bronze_to_silver_loans',
+        description: 'Enriches loans with customer and product details, calculates LTV ratio',
+        source_table: 'meridian.bronze_loans',
+        target_table: 'meridian.silver_loans',
+        schedule: 'daily',
+        is_active: true,
+      },
+      {
+        id: 'pl-004',
+        name: 'silver_to_gold_daily_revenue',
+        description: 'Aggregates daily revenue from transactions',
+        source_table: 'meridian.silver_transactions',
+        target_table: 'meridian.gold_daily_revenue',
+        schedule: 'daily at 01:00',
+        is_active: true,
+      },
+      {
+        id: 'pl-005',
+        name: 'silver_to_gold_branch_metrics',
+        description: 'Calculates branch-level metrics from transactions',
+        source_table: 'meridian.silver_transactions',
+        target_table: 'meridian.gold_branch_metrics',
+        schedule: 'daily at 01:30',
+        is_active: true,
+      },
+      {
+        id: 'pl-006',
+        name: 'silver_to_gold_loan_summary',
+        description: 'Aggregates loan portfolio metrics',
+        source_table: 'meridian.silver_loans',
+        target_table: 'meridian.gold_loan_summary',
+        schedule: 'daily at 02:00',
+        is_active: true,
+      },
+      {
+        id: 'pl-007',
+        name: 'silver_to_gold_customer_360',
+        description: 'Creates customer 360 view combining accounts, loans, and transactions',
+        source_table: 'meridian.silver_customers',
+        target_table: 'meridian.gold_customer_360',
+        schedule: 'daily at 03:00',
+        is_active: true,
+      },
+    ];
+  }
+
+  private inferLineageFromNaming(assetNames: string[]): LineageRelationship[] {
+    const relationships: LineageRelationship[] = [];
+
+    // Map of layer prefixes and their likely upstream sources
+    const layerHierarchy = [
+      { pattern: 'bronze_', upstreamPrefix: null, layer: 'bronze' },
+      { pattern: 'silver_', upstreamPrefix: 'bronze_', layer: 'silver' },
+      { pattern: 'gold_', upstreamPrefix: 'silver_', layer: 'gold' },
+    ];
+
+    // Common entity mappings (e.g., gold_customer_360 comes from silver_customers)
+    const entityMappings: Record<string, string[]> = {
+      'gold_daily_revenue': ['silver_transactions'],
+      'gold_branch_metrics': ['silver_transactions', 'ref_branches'],
+      'gold_loan_summary': ['silver_loans'],
+      'gold_customer_360': ['silver_customers', 'silver_accounts', 'silver_loans', 'silver_transactions'],
+    };
+
+    for (const assetName of assetNames) {
+      // Check direct entity mappings first
+      const directMappings = entityMappings[assetName];
+      if (directMappings) {
+        for (const upstream of directMappings) {
+          if (assetNames.includes(upstream)) {
+            relationships.push({
+              sourceAsset: upstream,
+              targetAsset: assetName,
+              relationshipType: 'inferred',
+              confidence: 'high',
+            });
+          }
+        }
+        continue;
+      }
+
+      // Infer from naming patterns
+      for (const { pattern, upstreamPrefix } of layerHierarchy) {
+        if (assetName.startsWith(pattern) && upstreamPrefix) {
+          const entityName = assetName.replace(pattern, '');
+          const potentialUpstream = `${upstreamPrefix}${entityName}`;
+
+          if (assetNames.includes(potentialUpstream)) {
+            relationships.push({
+              sourceAsset: potentialUpstream,
+              targetAsset: assetName,
+              relationshipType: 'inferred',
+              confidence: 'medium',
+            });
+          }
+        }
+      }
+
+      // Check for reference table relationships (ref_ prefix)
+      if (assetName.startsWith('ref_')) {
+        // Reference tables are typically upstream of silver/gold tables
+        const entityName = assetName.replace('ref_', '');
+        for (const otherAsset of assetNames) {
+          if (otherAsset.includes(entityName) && !otherAsset.startsWith('ref_')) {
+            relationships.push({
+              sourceAsset: assetName,
+              targetAsset: otherAsset,
+              relationshipType: 'inferred',
+              confidence: 'low',
+            });
+          }
+        }
+      }
+    }
+
+    return relationships;
+  }
+
+  private async updateAssetLineage(relationship: LineageRelationship): Promise<void> {
+    const { sourceAsset, targetAsset } = relationship;
+
+    // Update the source asset's downstream_assets
+    const { data: sourceData } = await this.amygdalaClient
+      .from('assets')
+      .select('downstream_assets')
+      .eq('name', sourceAsset)
+      .single();
+
+    if (sourceData) {
+      const currentDownstream = sourceData.downstream_assets || [];
+      if (!currentDownstream.includes(targetAsset)) {
+        await this.amygdalaClient
+          .from('assets')
+          .update({
+            downstream_assets: [...currentDownstream, targetAsset],
+            updated_at: new Date().toISOString(),
+          })
+          .eq('name', sourceAsset);
+      }
+    }
+
+    // Update the target asset's upstream_assets
+    const { data: targetData } = await this.amygdalaClient
+      .from('assets')
+      .select('upstream_assets')
+      .eq('name', targetAsset)
+      .single();
+
+    if (targetData) {
+      const currentUpstream = targetData.upstream_assets || [];
+      if (!currentUpstream.includes(sourceAsset)) {
+        await this.amygdalaClient
+          .from('assets')
+          .update({
+            upstream_assets: [...currentUpstream, sourceAsset],
+            updated_at: new Date().toISOString(),
+          })
+          .eq('name', targetAsset);
+      }
+    }
+  }
+
+  private async storePipelineMetadata(pipelines: PipelineInfo[]): Promise<void> {
+    // Store pipeline metadata in assets for UI display
+    for (const pipeline of pipelines) {
+      const targetTable = pipeline.target_table.replace('meridian.', '');
+
+      await this.amygdalaClient
+        .from('assets')
+        .update({
+          metadata: {
+            pipeline: {
+              name: pipeline.name,
+              description: pipeline.description,
+              schedule: pipeline.schedule,
+              is_active: pipeline.is_active,
+            },
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('name', targetTable);
+    }
   }
 }
 
