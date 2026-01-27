@@ -300,3 +300,50 @@ EOF
 - Deploying to production
 - Deleting data
 - Major architecture changes
+
+---
+
+## CLI Tools (ALWAYS USE FIRST)
+
+**IMPORTANT:** Always use CLI tools for Vercel and Supabase operations. Only escalate to the user if CLI cannot solve the issue.
+
+### Vercel CLI
+```bash
+# Check deployments
+vercel ls platform --scope amygdala
+
+# Inspect specific deployment
+vercel inspect <deployment-url> --scope amygdala
+
+# Check deployment logs
+vercel logs <deployment-url> --scope amygdala
+
+# Trigger production deployment
+vercel --prod --yes
+
+# List projects
+vercel project ls
+```
+
+### Supabase CLI
+```bash
+# Check database status
+supabase status
+
+# Run SQL queries
+supabase db execute --sql "SELECT * FROM table LIMIT 10"
+
+# Push migrations
+supabase db push
+
+# Pull remote schema
+supabase db pull
+
+# Generate types
+supabase gen types typescript --local > packages/database/src/types.generated.ts
+```
+
+### Troubleshooting Workflow
+1. **Deployment issues** → Use `vercel ls` and `vercel inspect` first
+2. **Database issues** → Use `supabase` CLI to diagnose
+3. **Only if CLI fails** → Ask user for help with dashboard access
