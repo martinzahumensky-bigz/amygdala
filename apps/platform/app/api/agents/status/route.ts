@@ -48,15 +48,16 @@ export async function GET(request: Request) {
     const agentStats: Record<string, any> = {};
 
     for (const agent of agents) {
+      // Use ilike for case-insensitive matching (handles 'spotter' vs 'Spotter')
       const { data: agentRuns } = await supabase
         .from('agent_runs')
         .select('status')
-        .eq('agent_name', agent);
+        .ilike('agent_name', agent);
 
       const { data: lastRun } = await supabase
         .from('agent_runs')
         .select('*')
-        .eq('agent_name', agent)
+        .ilike('agent_name', agent)
         .order('started_at', { ascending: false })
         .limit(1)
         .single();
