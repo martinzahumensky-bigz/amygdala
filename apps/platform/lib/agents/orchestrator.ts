@@ -83,11 +83,12 @@ export class OrchestratorAgent {
 
   constructor() {
     const apiKey = process.env.ANTHROPIC_API_KEY;
+    console.log('Anthropic API key status:', apiKey ? `Set (${apiKey.slice(0, 10)}...)` : 'NOT SET');
     if (!apiKey) {
-      console.error('ANTHROPIC_API_KEY is not set');
+      console.error('ANTHROPIC_API_KEY is not set - chat will not work');
     }
     this.anthropic = new Anthropic({
-      apiKey: apiKey || '',
+      apiKey: apiKey || 'missing-api-key',
     });
   }
 
@@ -129,6 +130,15 @@ Always be helpful and proactive in suggesting next steps.`;
     userMessage: string,
     context: ChatContext
   ): Promise<OrchestratorResponse> {
+    // Check if API key is configured
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return {
+        message: 'The AI service is not configured. Please set the ANTHROPIC_API_KEY environment variable.',
+        agentUsed: 'orchestrator',
+        action: { type: 'none' },
+      };
+    }
+
     try {
       // Build conversation history
       const messages: Anthropic.MessageParam[] = context.messages.map((msg) => ({
