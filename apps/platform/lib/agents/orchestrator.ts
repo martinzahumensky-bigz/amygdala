@@ -82,8 +82,12 @@ export class OrchestratorAgent {
   private meridian = getMeridianClient();
 
   constructor() {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      console.error('ANTHROPIC_API_KEY is not set');
+    }
     this.anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
+      apiKey: apiKey || '',
     });
   }
 
@@ -185,8 +189,27 @@ ${entityContextInfo}`;
       };
     } catch (error) {
       console.error('Orchestrator error:', error);
+
+      // Provide more detailed error message
+      let errorMessage = 'I encountered an error processing your request. Please try again.';
+
+      if (error instanceof Error) {
+        // Check for common error types
+        if (error.message.includes('API key')) {
+          errorMessage = 'The AI service is not configured properly. Please check the API key configuration.';
+        } else if (error.message.includes('rate limit')) {
+          errorMessage = 'The AI service is currently busy. Please try again in a moment.';
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = 'Unable to connect to the AI service. Please check your connection.';
+        } else if (error.message.includes('timeout')) {
+          errorMessage = 'The request timed out. Please try again.';
+        }
+
+        console.error('Error details:', error.message);
+      }
+
       return {
-        message: 'I encountered an error processing your request. Please try again.',
+        message: errorMessage,
         agentUsed: 'orchestrator',
         action: { type: 'none' },
       };

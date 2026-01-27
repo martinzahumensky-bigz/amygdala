@@ -52,9 +52,30 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Chat API error:', error);
+
+    // Check if it's an Anthropic API error
+    let errorMessage = 'Unknown error';
+    let statusCode = 500;
+
+    if (error instanceof Error) {
+      errorMessage = error.message;
+
+      // Handle specific error types
+      if (errorMessage.includes('401') || errorMessage.includes('API key')) {
+        errorMessage = 'AI service authentication failed. Please check the API configuration.';
+        statusCode = 401;
+      } else if (errorMessage.includes('429') || errorMessage.includes('rate limit')) {
+        errorMessage = 'AI service rate limit reached. Please try again in a moment.';
+        statusCode = 429;
+      }
+    }
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
+      {
+        error: errorMessage,
+        message: `Sorry, I encountered an error: ${errorMessage}. Please try again.`,
+      },
+      { status: statusCode }
     );
   }
 }

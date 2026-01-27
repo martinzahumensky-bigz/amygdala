@@ -4,6 +4,42 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
+// Consumer applications/reports that use gold layer data
+const consumerDefinitions = [
+  {
+    id: 'consumer-001',
+    name: 'Branch Performance Dashboard',
+    description: 'Meridian Bank branch performance monitoring dashboard',
+    type: 'dashboard',
+    source_tables: ['gold_branch_metrics', 'gold_daily_revenue'],
+    app: 'Meridian Bank App',
+  },
+  {
+    id: 'consumer-002',
+    name: 'Daily Revenue Report',
+    description: 'Executive daily revenue summary report',
+    type: 'report',
+    source_tables: ['gold_daily_revenue'],
+    app: 'Meridian Bank App',
+  },
+  {
+    id: 'consumer-003',
+    name: 'Loan Portfolio Dashboard',
+    description: 'NPL tracking and loan portfolio analysis',
+    type: 'dashboard',
+    source_tables: ['gold_loan_summary', 'gold_customer_360'],
+    app: 'Meridian Bank App',
+  },
+  {
+    id: 'consumer-004',
+    name: 'Customer 360 View',
+    description: 'Complete customer profile including accounts, loans, and transactions',
+    type: 'application',
+    source_tables: ['gold_customer_360'],
+    app: 'Meridian Bank App',
+  },
+];
+
 // Pipeline definitions (matching Documentarist agent)
 const pipelineDefinitions = [
   {
@@ -223,6 +259,24 @@ LEFT JOIN (
   },
 ];
 
+// Helper function to extract source tables from SQL
+function extractSourceTablesFromSQL(sql: string): string[] {
+  const tables: string[] = [];
+
+  // Match FROM and JOIN clauses
+  const fromMatches = sql.match(/FROM\s+([a-z_]+)/gi) || [];
+  const joinMatches = sql.match(/JOIN\s+([a-z_]+)/gi) || [];
+
+  [...fromMatches, ...joinMatches].forEach(match => {
+    const tableName = match.replace(/^(FROM|JOIN)\s+/i, '').trim();
+    if (!tables.includes(tableName) && !tableName.startsWith('(')) {
+      tables.push(tableName);
+    }
+  });
+
+  return tables;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ assetId: string }> }
@@ -244,16 +298,31 @@ export async function GET(
       return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
     }
 
-    // Find pipelines that involve this asset
+    // Find pipelines that produce this asset (incoming)
     const incomingPipelines = pipelineDefinitions.filter(
       (p) => p.target_table === asset.name
     );
+
+    // Find pipelines that consume this asset (outgoing)
     const outgoingPipelines = pipelineDefinitions.filter(
       (p) => p.source_table === asset.name
     );
 
+    // Extract ALL source tables from the incoming pipeline SQL
+    const sqlSourceTables: string[] = [];
+    incomingPipelines.forEach(p => {
+      const tables = extractSourceTablesFromSQL(p.transformation_logic);
+      tables.forEach(t => {
+        if (!sqlSourceTables.includes(t)) {
+          sqlSourceTables.push(t);
+        }
+      });
+    });
+
+    // Combine stored upstream with SQL-detected sources
+    const upstreamNames = [...new Set([...(asset.upstream_assets || []), ...sqlSourceTables])];
+
     // Get upstream assets with details
-    const upstreamNames = asset.upstream_assets || [];
     let upstreamAssets: any[] = [];
     if (upstreamNames.length > 0) {
       const { data: upstream } = await supabase
@@ -262,6 +331,11 @@ export async function GET(
         .in('name', upstreamNames);
       upstreamAssets = upstream || [];
     }
+
+    // Find consumers that use this asset (for gold layer)
+    const consumers = consumerDefinitions.filter(c =>
+      c.source_tables.includes(asset.name)
+    );
 
     // Get downstream assets with details
     const downstreamNames = asset.downstream_assets || [];
@@ -293,6 +367,8 @@ export async function GET(
           is_active: p.is_active,
           transformation_logic: p.transformation_logic,
         })),
+        // Include all SQL-detected source tables for reference
+        sqlSourceTables,
       },
       downstream: {
         assets: downstreamAssets,
@@ -304,6 +380,14 @@ export async function GET(
           schedule: p.schedule,
           is_active: p.is_active,
           transformation_logic: p.transformation_logic,
+        })),
+        // Include consumer applications/reports
+        consumers: consumers.map((c) => ({
+          id: c.id,
+          name: c.name,
+          description: c.description,
+          type: c.type,
+          app: c.app,
         })),
       },
       dataFlow: {
@@ -327,6 +411,13 @@ export async function GET(
             type: 'downstream',
             layer: a.layer,
           })),
+          ...consumers.map((c) => ({
+            id: c.id,
+            name: c.name,
+            type: 'consumer',
+            layer: 'consumer',
+            app: c.app,
+          })),
         ],
         edges: [
           ...incomingPipelines.map((p) => ({
@@ -338,6 +429,12 @@ export async function GET(
             source: p.source_table,
             target: p.target_table,
             pipeline: p.name,
+          })),
+          // Consumer edges
+          ...consumers.map((c) => ({
+            source: asset.name,
+            target: c.name,
+            type: 'consumes',
           })),
         ],
       },

@@ -202,9 +202,17 @@ interface PipelineInfo {
   transformation_logic?: string;
 }
 
+interface Consumer {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  app: string;
+}
+
 interface LineageData {
-  upstream: { assets: LineageAsset[]; pipelines: PipelineInfo[] };
-  downstream: { assets: LineageAsset[]; pipelines: PipelineInfo[] };
+  upstream: { assets: LineageAsset[]; pipelines: PipelineInfo[]; sqlSourceTables?: string[] };
+  downstream: { assets: LineageAsset[]; pipelines: PipelineInfo[]; consumers?: Consumer[] };
 }
 
 function LineageCard({
@@ -243,6 +251,8 @@ function LineageCard({
   const downstreamAssets = lineageData?.downstream?.assets || lineage.downstream;
   const incomingPipelines = lineageData?.upstream?.pipelines || [];
   const outgoingPipelines = lineageData?.downstream?.pipelines || [];
+  const consumers = lineageData?.downstream?.consumers || [];
+  const sqlSourceTables = lineageData?.upstream?.sqlSourceTables || [];
 
   return (
     <Card>
@@ -333,10 +343,11 @@ function LineageCard({
           <div className="space-y-3">
             <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-2">
               <ArrowUpRight className="h-4 w-4" />
-              Downstream Consumers ({downstreamAssets.length})
+              Downstream Consumers ({downstreamAssets.length + consumers.length})
             </h4>
-            {downstreamAssets.length > 0 ? (
+            {(downstreamAssets.length > 0 || consumers.length > 0) ? (
               <div className="space-y-2">
+                {/* Data Asset Consumers */}
                 {downstreamAssets.map((downAsset) => (
                   <Link
                     key={downAsset.id || downAsset.name}
@@ -361,6 +372,28 @@ function LineageCard({
                       {downAsset.layer}
                     </Badge>
                   </Link>
+                ))}
+                {/* Application/Report Consumers */}
+                {consumers.map((consumer) => (
+                  <div
+                    key={consumer.id}
+                    className="p-3 rounded-lg border border-purple-200 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/20"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900 dark:text-white text-sm">
+                        {consumer.name}
+                      </span>
+                      <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300 text-xs">
+                        {consumer.type}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {consumer.description}
+                    </p>
+                    <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                      {consumer.app}
+                    </p>
+                  </div>
                 ))}
               </div>
             ) : (
