@@ -203,40 +203,40 @@
 
 ### FEAT-017: Enhanced Catalog Pages with Tabbed Interface
 **GitHub Issue:** #4
-**Status:** In Progress
+**Status:** Completed
 **Original Prompt:** "Improve cataloging pages with comprehensive tabs for overview, profiling, quality, preview, lineage, and transformations"
 
 **Overview Tab (Documentarist)**
-- [ ] Dataset metadata (name, type, layer, source system)
-- [ ] Business description and context
-- [ ] Sensitive data indicators
-- [ ] Business terms/glossary mapping
-- [ ] Data usage information
+- [x] Dataset metadata (name, type, layer, source system)
+- [x] Business description and context
+- [x] Sensitive data indicators
+- [x] Business terms/glossary mapping
+- [x] Data usage information
 
 **Profiling Tab**
-- [ ] Column-level statistics (null %, distinct, min/max/mean)
-- [ ] Data format patterns and masks
-- [ ] AI-interpreted anomaly highlights
-- [ ] Semantic type detection
+- [x] Column-level statistics (null %, distinct, min/max/mean)
+- [x] Data format patterns and masks
+- [x] AI-interpreted anomaly highlights
+- [x] Semantic type detection
 
 **Quality Tab**
-- [ ] Overall quality score with breakdown
-- [ ] Applied quality rules list
-- [ ] Attribute-level quality indicators
+- [x] Overall quality score with breakdown
+- [x] Applied quality rules list
+- [x] Attribute-level quality indicators
 
 **Preview Tab**
-- [ ] Paginated sample data table
-- [ ] Column type indicators
-- [ ] NULL value highlighting
+- [x] Paginated sample data table
+- [x] Column type indicators
+- [x] NULL value highlighting
 
 **Lineage Tab**
-- [ ] Visual lineage diagram
-- [ ] AI-explained data flow
-- [ ] Pipeline/transformation details
+- [x] Visual lineage diagram
+- [x] AI-explained data flow
+- [x] Pipeline/transformation details
 
 **Transformations Tab**
-- [ ] Agent-generated improvements
-- [ ] Transformation history
+- [x] Agent-generated improvements
+- [x] Transformation history
 
 ---
 
@@ -397,3 +397,4 @@ Mastering Agent:
 | FEAT-010 | Data Trust Index | 2026-01-27 |
 | FEAT-011 | Home Dashboard Widgets | 2026-01-27 |
 | FEAT-016 | Orchestrator Agent Chat Interface | 2026-01-27 |
+| FEAT-017 | Enhanced Catalog Pages with Tabbed Interface | 2026-01-28 |
