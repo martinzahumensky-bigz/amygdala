@@ -243,11 +243,16 @@ Severity Guidelines:
   }
 
   private getTableName(asset: any): string | null {
+    // First check if asset has source_table set
+    if (asset.source_table) {
+      return asset.source_table;
+    }
+
     // Extract schema.table from asset name or metadata
     const name = asset.name.toLowerCase();
 
     // Check if it's a meridian table
-    if (name.includes('silver_') || name.includes('gold_') || name.includes('ref_')) {
+    if (name.includes('silver_') || name.includes('gold_') || name.includes('ref_') || name.includes('bronze_')) {
       return `meridian.${name}`;
     }
 
@@ -605,7 +610,7 @@ Severity Guidelines:
 
   private getTableNameFromAsset(assetName: string): string | null {
     const name = assetName.toLowerCase();
-    if (name.includes('silver_') || name.includes('gold_') || name.includes('ref_')) {
+    if (name.includes('silver_') || name.includes('gold_') || name.includes('ref_') || name.includes('bronze_')) {
       return `meridian.${name}`;
     }
     return null;

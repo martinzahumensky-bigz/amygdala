@@ -830,10 +830,14 @@ Always respond with a JSON object containing:
     }
 
     // Update column profiles - delete old ones first, then insert new
-    await this.amygdalaClient
+    const { error: deleteError } = await this.amygdalaClient
       .from('column_profiles')
       .delete()
       .eq('asset_id', existingAsset.id);
+
+    if (deleteError) {
+      await this.log('profile_delete_warning', `Could not delete old profiles for ${asset.name}: ${deleteError.message}`);
+    }
 
     if (asset.profile.columns.length > 0) {
       const columnProfileRecords = asset.profile.columns.map(col => ({
@@ -841,24 +845,35 @@ Always respond with a JSON object containing:
         column_name: col.name,
         data_type: col.data_type,
         inferred_semantic_type: col.inferred_semantic_type,
-        null_count: col.null_count,
-        null_percentage: col.null_percentage,
-        distinct_count: col.distinct_count,
-        distinct_percentage: col.distinct_percentage,
-        min_value: col.min_value !== undefined ? JSON.stringify(col.min_value) : null,
-        max_value: col.max_value !== undefined ? JSON.stringify(col.max_value) : null,
-        mean_value: col.mean_value,
+        null_count: col.null_count || 0,
+        null_percentage: col.null_percentage || 0,
+        distinct_count: col.distinct_count || 0,
+        distinct_percentage: col.distinct_percentage || 0,
+        min_value: col.min_value !== undefined ? String(col.min_value).slice(0, 255) : null,
+        max_value: col.max_value !== undefined ? String(col.max_value).slice(0, 255) : null,
+        mean_value: col.mean_value || null,
         top_values: col.top_values || [],
+        profiled_at: new Date().toISOString(),
       }));
 
-      await this.amygdalaClient
+      const { error: insertError } = await this.amygdalaClient
         .from('column_profiles')
         .insert(columnProfileRecords);
+
+      if (insertError) {
+        await this.log('profile_insert_error', `Could not insert column profiles for ${asset.name}: ${insertError.message}`, {
+          error: insertError,
+          columnCount: columnProfileRecords.length,
+        });
+      } else {
+        await this.log('profiles_inserted', `Inserted ${columnProfileRecords.length} column profiles for ${asset.name}`);
+      }
     }
 
     await this.log('asset_updated', `Updated asset profile: ${asset.name}`, {
       sensitiveColumns: sensitiveColumns.length,
       businessTerms: Object.keys(businessTerms).length,
+      columnCount: asset.profile.columns.length,
     });
   }
 
