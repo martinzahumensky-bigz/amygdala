@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getAmygdalaClient, getMeridianClient } from '../supabase/client';
 import { getSpotterAgent } from './spotter';
+import { getDocumentaristAgent } from './documentarist';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -29,55 +30,111 @@ export interface OrchestratorResponse {
     details?: Record<string, any>;
   };
   suggestions?: string[];
+  toolResults?: Record<string, any>;
 }
+
+// Define tools the Orchestrator can use
+const TOOLS: Anthropic.Tool[] = [
+  {
+    name: 'run_documentarist',
+    description: 'Run the Documentarist agent to profile a data asset and generate column statistics, detect sensitive data, and map business terms. Use this when a user asks to profile an asset, generate statistics, or wants to see column information.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        asset_name: {
+          type: 'string',
+          description: 'The name of the asset to profile (e.g., "gold_loan_summary", "silver_transactions")',
+        },
+        mode: {
+          type: 'string',
+          enum: ['single_asset', 'full_scan'],
+          description: 'Whether to profile a single asset or scan all assets',
+        },
+      },
+      required: ['asset_name'],
+    },
+  },
+  {
+    name: 'run_spotter',
+    description: 'Run the Spotter agent to detect anomalies and data quality issues across all data assets. Use this when a user asks to scan for issues, check data quality, or find anomalies.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        scope: {
+          type: 'string',
+          enum: ['all', 'gold', 'silver', 'bronze'],
+          description: 'Which data layer to scan for issues',
+        },
+      },
+    },
+  },
+  {
+    name: 'get_asset_details',
+    description: 'Get detailed information about a specific data asset including its profile, quality rules, and statistics.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        asset_name: {
+          type: 'string',
+          description: 'The name of the asset to get details for',
+        },
+      },
+      required: ['asset_name'],
+    },
+  },
+  {
+    name: 'get_column_profiles',
+    description: 'Get column-level profiling statistics for an asset including null rates, distinct counts, and value distributions.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        asset_name: {
+          type: 'string',
+          description: 'The name of the asset to get column profiles for',
+        },
+      },
+      required: ['asset_name'],
+    },
+  },
+  {
+    name: 'list_open_issues',
+    description: 'List all open data quality issues, optionally filtered by asset.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        asset_name: {
+          type: 'string',
+          description: 'Optional: filter issues by asset name',
+        },
+        severity: {
+          type: 'string',
+          enum: ['critical', 'high', 'medium', 'low'],
+          description: 'Optional: filter by severity',
+        },
+      },
+    },
+  },
+];
 
 const AVAILABLE_AGENTS = {
   spotter: {
     name: 'Spotter',
     description: 'Detects anomalies and data quality issues in your data assets',
-    capabilities: ['anomaly detection', 'null rate analysis', 'outlier detection', 'freshness checks', 'reference validation'],
-    available: true,
-  },
-  debugger: {
-    name: 'Debugger',
-    description: 'Investigates issues and finds root causes',
-    capabilities: ['root cause analysis', 'lineage tracing', 'issue investigation'],
-    available: true,
+    capabilities: ['anomaly detection', 'null rate analysis', 'outlier detection', 'freshness checks'],
   },
   documentarist: {
     name: 'Documentarist',
-    description: 'Discovers and documents data assets automatically',
-    capabilities: ['asset discovery', 'profiling', 'description generation', 'lineage tracing'],
-    available: true,
-  },
-  operator: {
-    name: 'Operator',
-    description: 'Executes approved changes to assets, issues, and pipelines',
-    capabilities: ['metadata updates', 'issue resolution', 'fix execution', 'pipeline refresh'],
-    available: true,
+    description: 'Discovers and documents data assets automatically, profiles columns, detects sensitive data',
+    capabilities: ['asset profiling', 'column statistics', 'sensitive data detection', 'business term mapping'],
   },
   quality: {
     name: 'Quality Agent',
     description: 'Generates and enforces data quality rules based on profiling',
-    capabilities: ['rule generation', 'data profiling', 'validation', 'quality scoring'],
-    available: true,
-  },
-  trust: {
-    name: 'Trust Agent',
-    description: 'Calculates and monitors trust scores for data assets',
-    capabilities: ['trust scoring', 'trend detection', 'fitness assessment', 'recommendations'],
-    available: true,
-  },
-  transformation: {
-    name: 'Transformation Agent',
-    description: 'Creates derived datasets and repairs data issues',
-    capabilities: ['data transformation', 'table creation', 'data repair'],
-    available: false,
+    capabilities: ['rule generation', 'validation', 'quality scoring'],
   },
 };
 
 export class OrchestratorAgent {
-  private anthropic: Anthropic;
   private supabase = getAmygdalaClient();
   private meridian = getMeridianClient();
 
@@ -86,50 +143,35 @@ export class OrchestratorAgent {
     if (!apiKey) {
       console.error('ANTHROPIC_API_KEY is not set - chat will not work');
     }
-    this.anthropic = new Anthropic({
-      apiKey: apiKey || '',
-    });
   }
 
   get systemPrompt(): string {
     return `You are the Orchestrator Agent for Amygdala, a data trust platform. Your role is to:
 
 1. Understand user requests about data quality, trust, and management
-2. Coordinate with specialized agents when needed
-3. Provide helpful information about data assets, issues, and quality
+2. Execute actions using the available tools when the user asks for something
+3. Provide helpful information and real results from tool executions
+
+IMPORTANT: When a user asks you to do something (like profile an asset, scan for issues, etc.), you MUST use the appropriate tool to actually perform the action. Do not just describe what you would do - actually do it using the tools.
 
 Available Agents:
 ${Object.entries(AVAILABLE_AGENTS).map(([id, agent]) =>
-  `- ${agent.name}: ${agent.description}
-   Capabilities: ${agent.capabilities.join(', ')}
-   Status: ${agent.available === false ? 'Coming Soon' : 'Available'}`
+  `- ${agent.name}: ${agent.description}`
 ).join('\n')}
 
-Current Data Context:
-- Platform: Amygdala Data Trust Platform
-- Sample Client: Meridian Bank
-- Data Layers: consumer (reports/dashboards), gold (aggregated), silver (cleansed), bronze (raw)
-
 When responding:
-- Be concise and helpful
-- If the user asks about data quality issues, suggest running the Spotter agent
-- If discussing specific assets, provide relevant context
-- Offer to take actions when appropriate
-- Use markdown formatting for clarity
-
-If you determine an agent should be run, include in your response:
-[ACTION:RUN_AGENT:agent_name] - to trigger an agent run
-[ACTION:SHOW_ISSUES] - to display current issues
-[ACTION:SHOW_ASSETS] - to display catalog assets
-
-Always be helpful and proactive in suggesting next steps.`;
+- Be concise and action-oriented
+- When the user asks to profile an asset, use the run_documentarist tool
+- When the user asks to scan for issues, use the run_spotter tool
+- When the user asks about an asset, use get_asset_details or get_column_profiles
+- Report the actual results from tools, not hypothetical outcomes
+- Use markdown formatting for results`;
   }
 
   async processMessage(
     userMessage: string,
     context: ChatContext
   ): Promise<OrchestratorResponse> {
-    // Check if API key is configured
     if (!process.env.ANTHROPIC_API_KEY) {
       return {
         message: 'The AI service is not configured. Please set the ANTHROPIC_API_KEY environment variable.',
@@ -163,14 +205,10 @@ Always be helpful and proactive in suggesting next steps.`;
 Current Platform State:
 - Total Assets: ${dataContext.assetCount}
 - Open Issues: ${dataContext.openIssues}
-- Recent Agent Runs: ${dataContext.recentRuns}
 - Average Quality: ${dataContext.avgQuality}%
-
-Recent Issues:
-${dataContext.recentIssuesSummary}
 ${entityContextInfo}`;
 
-      // Call Claude API
+      // Call Claude API with tools
       const apiKey = process.env.ANTHROPIC_API_KEY;
 
       const fetchResponse = await fetch('https://api.anthropic.com/v1/messages', {
@@ -182,9 +220,10 @@ ${entityContextInfo}`;
         },
         body: JSON.stringify({
           model: 'claude-3-haiku-20240307',
-          max_tokens: 1024,
+          max_tokens: 4096,
           system: enrichedPrompt,
           messages,
+          tools: TOOLS,
         }),
       });
 
@@ -196,22 +235,19 @@ ${entityContextInfo}`;
 
       const response = await fetchResponse.json();
 
-      const textBlock = response.content.find((block) => block.type === 'text');
-      const responseText = textBlock ? textBlock.text : 'I apologize, I could not process your request.';
-
-      // Parse actions from response
-      const action = this.parseAction(responseText);
-      const cleanedMessage = this.cleanMessage(responseText);
-
-      // Execute actions if needed
-      if (action.type === 'run_agent' && action.details?.agent) {
-        await this.executeAgentRun(action.details.agent);
+      // Check if Claude wants to use tools
+      if (response.stop_reason === 'tool_use') {
+        return await this.handleToolUse(response, messages, enrichedPrompt);
       }
 
+      // Extract text response
+      const textBlock = response.content.find((block: any) => block.type === 'text');
+      const responseText = textBlock?.text || 'I apologize, I could not process your request.';
+
       return {
-        message: cleanedMessage,
+        message: responseText,
         agentUsed: 'orchestrator',
-        action,
+        action: { type: 'none' },
         suggestions: this.generateSuggestions(userMessage, dataContext),
       };
     } catch (error) {
@@ -224,10 +260,6 @@ ${entityContextInfo}`;
           errorMessage = 'The AI service is not configured properly. Please check the API key.';
         } else if (error.message.includes('rate limit') || error.message.includes('429')) {
           errorMessage = 'The AI service is busy. Please try again in a moment.';
-        } else if (error.message.includes('Connection error')) {
-          errorMessage = 'Unable to connect to the AI service.';
-        } else if (error.message.includes('404') || error.message.includes('model')) {
-          errorMessage = 'AI model configuration error. Please contact support.';
         }
       }
 
@@ -239,34 +271,332 @@ ${entityContextInfo}`;
     }
   }
 
-  private async gatherDataContext(): Promise<{
-    assetCount: number;
-    openIssues: number;
-    recentRuns: number;
-    avgQuality: number;
-    recentIssuesSummary: string;
-  }> {
+  private async handleToolUse(
+    response: any,
+    messages: Anthropic.MessageParam[],
+    systemPrompt: string
+  ): Promise<OrchestratorResponse> {
+    const toolUseBlocks = response.content.filter((block: any) => block.type === 'tool_use');
+    const toolResults: any[] = [];
+    const executedActions: Record<string, any> = {};
+
+    // Execute each tool
+    for (const toolBlock of toolUseBlocks) {
+      const result = await this.executeTool(toolBlock.name, toolBlock.input);
+      executedActions[toolBlock.name] = result;
+
+      toolResults.push({
+        type: 'tool_result',
+        tool_use_id: toolBlock.id,
+        content: JSON.stringify(result),
+      });
+    }
+
+    // Send tool results back to Claude for final response
+    const updatedMessages: Anthropic.MessageParam[] = [
+      ...messages,
+      { role: 'assistant', content: response.content },
+      { role: 'user', content: toolResults },
+    ];
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const finalResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey || '',
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-3-haiku-20240307',
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: updatedMessages,
+        tools: TOOLS,
+      }),
+    });
+
+    if (!finalResponse.ok) {
+      const errorText = await finalResponse.text();
+      throw new Error(`API error: ${errorText}`);
+    }
+
+    const finalData = await finalResponse.json();
+    const textBlock = finalData.content.find((block: any) => block.type === 'text');
+    const responseText = textBlock?.text || 'Action completed successfully.';
+
+    return {
+      message: responseText,
+      agentUsed: 'orchestrator',
+      action: { type: 'run_agent', details: executedActions },
+      toolResults: executedActions,
+    };
+  }
+
+  private async executeTool(toolName: string, input: any): Promise<any> {
+    console.log(`Executing tool: ${toolName}`, input);
+
+    switch (toolName) {
+      case 'run_documentarist':
+        return await this.executeDocumentarist(input);
+
+      case 'run_spotter':
+        return await this.executeSpotter(input);
+
+      case 'get_asset_details':
+        return await this.getAssetDetails(input.asset_name);
+
+      case 'get_column_profiles':
+        return await this.getColumnProfiles(input.asset_name);
+
+      case 'list_open_issues':
+        return await this.listOpenIssues(input);
+
+      default:
+        return { error: `Unknown tool: ${toolName}` };
+    }
+  }
+
+  private async executeDocumentarist(input: { asset_name: string; mode?: string }): Promise<any> {
     try {
-      // Get asset count
-      const { count: assetCount } = await this.supabase
+      // Find the asset by name
+      const { data: asset } = await this.supabase
         .from('assets')
-        .select('*', { count: 'exact', head: true });
+        .select('id, name, source_table')
+        .eq('name', input.asset_name)
+        .single();
+
+      if (!asset) {
+        // Asset doesn't exist, run discovery for this specific table
+        const documentarist = getDocumentaristAgent();
+        const result = await documentarist.run({
+          parameters: {
+            mode: 'single_asset',
+            targetTable: input.asset_name,
+            targetSchema: 'meridian',
+          },
+        });
+
+        return {
+          success: result.success,
+          action: 'profiled_new_asset',
+          assetName: input.asset_name,
+          stats: result.stats,
+          message: `Profiled ${input.asset_name}. Created new asset with ${result.stats?.profilesGenerated || 0} column profiles.`,
+        };
+      }
+
+      // Asset exists, run profiling on it
+      const documentarist = getDocumentaristAgent();
+      const result = await documentarist.run({
+        parameters: {
+          mode: 'single_asset',
+          assetId: asset.id,
+          targetTable: asset.source_table || input.asset_name,
+          targetSchema: 'meridian',
+        },
+      });
+
+      // Get the updated column profiles
+      const { data: profiles } = await this.supabase
+        .from('column_profiles')
+        .select('*')
+        .eq('asset_id', asset.id);
+
+      // Get updated asset metadata
+      const { data: updatedAsset } = await this.supabase
+        .from('assets')
+        .select('*')
+        .eq('id', asset.id)
+        .single();
+
+      return {
+        success: result.success,
+        action: 'profiled_existing_asset',
+        assetName: input.asset_name,
+        assetId: asset.id,
+        stats: result.stats,
+        columnCount: profiles?.length || 0,
+        columns: profiles?.slice(0, 10).map(p => ({
+          name: p.column_name,
+          type: p.data_type,
+          semanticType: p.inferred_semantic_type,
+          nullPercentage: p.null_percentage,
+          distinctCount: p.distinct_count,
+        })),
+        metadata: updatedAsset?.metadata,
+        message: `Successfully profiled ${input.asset_name}. Found ${profiles?.length || 0} columns.`,
+      };
+    } catch (error) {
+      console.error('Documentarist execution error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        assetName: input.asset_name,
+      };
+    }
+  }
+
+  private async executeSpotter(input: { scope?: string }): Promise<any> {
+    try {
+      const spotter = getSpotterAgent();
+      const result = await spotter.run({
+        parameters: { scope: input.scope || 'all' },
+      });
+
+      return {
+        success: result.success,
+        issuesFound: result.stats?.issuesCreated || 0,
+        checksRun: result.stats?.checksRun || 0,
+        message: `Spotter scan complete. Found ${result.stats?.issuesCreated || 0} issues.`,
+      };
+    } catch (error) {
+      console.error('Spotter execution error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  private async getAssetDetails(assetName: string): Promise<any> {
+    try {
+      const { data: asset } = await this.supabase
+        .from('assets')
+        .select('*')
+        .eq('name', assetName)
+        .single();
+
+      if (!asset) {
+        return { error: `Asset "${assetName}" not found` };
+      }
 
       // Get open issues
       const { data: issues } = await this.supabase
         .from('issues')
+        .select('title, severity, status')
+        .contains('affected_assets', [assetName])
+        .in('status', ['open', 'investigating', 'in_progress']);
+
+      return {
+        name: asset.name,
+        type: asset.asset_type,
+        layer: asset.layer,
+        description: asset.description,
+        qualityScore: asset.quality_score,
+        trustScore: asset.trust_score_stars,
+        fitnessStatus: asset.fitness_status,
+        owner: asset.owner,
+        steward: asset.steward,
+        metadata: asset.metadata,
+        openIssues: issues?.length || 0,
+        issues: issues?.slice(0, 5),
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async getColumnProfiles(assetName: string): Promise<any> {
+    try {
+      const { data: asset } = await this.supabase
+        .from('assets')
+        .select('id')
+        .eq('name', assetName)
+        .single();
+
+      if (!asset) {
+        return { error: `Asset "${assetName}" not found`, suggestion: 'Run the Documentarist to profile this asset first.' };
+      }
+
+      const { data: profiles } = await this.supabase
+        .from('column_profiles')
+        .select('*')
+        .eq('asset_id', asset.id)
+        .order('column_name');
+
+      if (!profiles || profiles.length === 0) {
+        return {
+          error: 'No column profiles found',
+          suggestion: 'Run the Documentarist agent to generate column profiles for this asset.',
+          assetName,
+        };
+      }
+
+      return {
+        assetName,
+        columnCount: profiles.length,
+        columns: profiles.map(p => ({
+          name: p.column_name,
+          dataType: p.data_type,
+          semanticType: p.inferred_semantic_type,
+          nullPercentage: p.null_percentage,
+          distinctCount: p.distinct_count,
+          distinctPercentage: p.distinct_percentage,
+          minValue: p.min_value,
+          maxValue: p.max_value,
+          meanValue: p.mean_value,
+          topValues: p.top_values?.slice(0, 3),
+        })),
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async listOpenIssues(input: { asset_name?: string; severity?: string }): Promise<any> {
+    try {
+      let query = this.supabase
+        .from('issues')
         .select('*')
         .in('status', ['open', 'investigating', 'in_progress'])
-        .order('created_at', { ascending: false })
-        .limit(5);
+        .order('severity')
+        .limit(10);
 
-      // Get recent runs
-      const { count: recentRuns } = await this.supabase
-        .from('agent_runs')
+      if (input.severity) {
+        query = query.eq('severity', input.severity);
+      }
+
+      const { data: issues } = await query;
+
+      let filteredIssues = issues || [];
+      if (input.asset_name) {
+        filteredIssues = filteredIssues.filter(i =>
+          i.affected_assets?.includes(input.asset_name)
+        );
+      }
+
+      return {
+        count: filteredIssues.length,
+        issues: filteredIssues.map(i => ({
+          id: i.id,
+          title: i.title,
+          severity: i.severity,
+          type: i.issue_type,
+          status: i.status,
+          affectedAssets: i.affected_assets,
+        })),
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async gatherDataContext(): Promise<{
+    assetCount: number;
+    openIssues: number;
+    avgQuality: number;
+  }> {
+    try {
+      const { count: assetCount } = await this.supabase
+        .from('assets')
+        .select('*', { count: 'exact', head: true });
+
+      const { count: openIssues } = await this.supabase
+        .from('issues')
         .select('*', { count: 'exact', head: true })
-        .gte('started_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+        .in('status', ['open', 'investigating', 'in_progress']);
 
-      // Get average quality
       const { data: assets } = await this.supabase
         .from('assets')
         .select('quality_score')
@@ -276,33 +606,39 @@ ${entityContextInfo}`;
         ? Math.round(assets.reduce((sum, a) => sum + (a.quality_score || 0), 0) / assets.length)
         : 0;
 
-      // Format issues summary
-      const recentIssuesSummary = issues && issues.length > 0
-        ? issues.map((i) => `- [${i.severity}] ${i.title}`).join('\n')
-        : 'No open issues';
-
       return {
         assetCount: assetCount || 0,
-        openIssues: issues?.length || 0,
-        recentRuns: recentRuns || 0,
+        openIssues: openIssues || 0,
         avgQuality,
-        recentIssuesSummary,
       };
     } catch (error) {
       console.error('Context gathering error:', error);
-      return {
-        assetCount: 0,
-        openIssues: 0,
-        recentRuns: 0,
-        avgQuality: 0,
-        recentIssuesSummary: 'Unable to fetch issues',
-      };
+      return { assetCount: 0, openIssues: 0, avgQuality: 0 };
     }
   }
 
   private async getEntityContextInfo(entityContext: NonNullable<ChatContext['entityContext']>): Promise<string> {
     try {
-      if (entityContext.type === 'issue' && entityContext.id) {
+      if (entityContext.type === 'asset' && entityContext.id) {
+        const { data: asset } = await this.supabase
+          .from('assets')
+          .select('*')
+          .eq('id', entityContext.id)
+          .single();
+
+        if (asset) {
+          return `
+FOCUSED CONTEXT - Asset:
+You are helping the user with a specific data asset:
+- Name: ${asset.name}
+- Type: ${asset.asset_type}
+- Layer: ${asset.layer}
+- Quality Score: ${asset.quality_score || 'N/A'}%
+- Trust Score: ${asset.trust_score_stars || 0}/5 stars
+
+When the user asks to profile or analyze this asset, use the asset name "${asset.name}" in tool calls.`;
+        }
+      } else if (entityContext.type === 'issue' && entityContext.id) {
         const { data: issue } = await this.supabase
           .from('issues')
           .select('*')
@@ -316,98 +652,13 @@ You are helping the user with a specific issue:
 - Title: ${issue.title}
 - Severity: ${issue.severity}
 - Type: ${issue.issue_type}
-- Status: ${issue.status}
-- Description: ${issue.description}
-- Affected Assets: ${issue.affected_assets?.join(', ') || 'None'}
-${issue.metadata?.debuggerAnalysis ? `
-Analysis Available:
-- Root Cause: ${issue.metadata.debuggerAnalysis.rootCause}
-- Confidence: ${issue.metadata.debuggerAnalysis.confidence}
-- Recommendation: ${issue.metadata.debuggerAnalysis.recommendation}
-` : ''}
-Focus your responses on this specific issue. If the user asks about fixes, suggest running the Debugger agent to analyze the issue.`;
-        }
-      } else if (entityContext.type === 'asset' && entityContext.id) {
-        const { data: asset } = await this.supabase
-          .from('assets')
-          .select('*')
-          .eq('id', entityContext.id)
-          .single();
-
-        if (asset) {
-          // Get open issues for this asset
-          const { data: assetIssues } = await this.supabase
-            .from('issues')
-            .select('title, severity')
-            .contains('affected_assets', [asset.name])
-            .in('status', ['open', 'investigating', 'in_progress'])
-            .limit(5);
-
-          return `
-FOCUSED CONTEXT - Asset:
-You are helping the user with a specific data asset:
-- Name: ${asset.name}
-- Type: ${asset.asset_type}
-- Layer: ${asset.layer}
-- Description: ${asset.description || 'No description'}
-- Quality Score: ${asset.quality_score || 'N/A'}%
-- Trust Score: ${asset.trust_score_stars || 0}/5 stars
-- Fitness Status: ${asset.fitness_status}
-- Owner: ${asset.owner || 'Not assigned'}
-- Steward: ${asset.steward || 'Not assigned'}
-${assetIssues && assetIssues.length > 0 ? `
-Open Issues:
-${assetIssues.map(i => `- [${i.severity}] ${i.title}`).join('\n')}
-` : ''}
-Focus your responses on this specific asset. Help the user improve its trust score and resolve any issues.`;
+- Affected Assets: ${issue.affected_assets?.join(', ') || 'None'}`;
         }
       }
 
       return '';
     } catch (error) {
-      console.error('Entity context error:', error);
       return '';
-    }
-  }
-
-  private parseAction(response: string): OrchestratorResponse['action'] {
-    // Check for agent run action
-    const agentMatch = response.match(/\[ACTION:RUN_AGENT:(\w+)\]/);
-    if (agentMatch) {
-      return { type: 'run_agent', details: { agent: agentMatch[1] } };
-    }
-
-    // Check for show issues action
-    if (response.includes('[ACTION:SHOW_ISSUES]')) {
-      return { type: 'show_data', details: { view: 'issues' } };
-    }
-
-    // Check for show assets action
-    if (response.includes('[ACTION:SHOW_ASSETS]')) {
-      return { type: 'show_data', details: { view: 'assets' } };
-    }
-
-    return { type: 'none' };
-  }
-
-  private cleanMessage(response: string): string {
-    // Remove action markers from the response
-    return response
-      .replace(/\[ACTION:RUN_AGENT:\w+\]/g, '')
-      .replace(/\[ACTION:SHOW_ISSUES\]/g, '')
-      .replace(/\[ACTION:SHOW_ASSETS\]/g, '')
-      .trim();
-  }
-
-  private async executeAgentRun(agentName: string): Promise<void> {
-    try {
-      if (agentName === 'spotter') {
-        const spotter = getSpotterAgent();
-        // Run asynchronously - don't await
-        spotter.run().catch(console.error);
-      }
-    } catch (error) {
-      console.error('Agent execution error:', error);
     }
   }
 
@@ -422,13 +673,11 @@ Focus your responses on this specific asset. Help the user improve its trust sco
     }
 
     if (context.assetCount === 0) {
-      suggestions.push('Help me set up the data catalog');
+      suggestions.push('Discover and catalog data assets');
     } else {
       suggestions.push('Run a data quality scan');
-      suggestions.push('Show me the trust index');
+      suggestions.push('Profile all assets');
     }
-
-    suggestions.push('What agents are available?');
 
     return suggestions.slice(0, 3);
   }

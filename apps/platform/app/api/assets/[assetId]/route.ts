@@ -52,8 +52,10 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     // Get sample data if asset has a source table
     let sampleData = { columns: [] as any[], rows: [] as any[], total: 0 };
-    if (asset.source_table) {
-      sampleData = await fetchSampleData(meridianClient, asset.source_table);
+    // Try source_table first, then fall back to asset name (for meridian tables)
+    const sourceTableName = asset.source_table || `meridian.${asset.name}`;
+    if (sourceTableName) {
+      sampleData = await fetchSampleData(meridianClient, sourceTableName);
     }
 
     // Get column profiles
@@ -313,38 +315,64 @@ async function fetchSampleData(
   // Extract table name (remove schema prefix if present)
   const tableName = sourceTable.split('.').pop() || sourceTable;
 
+  console.log(`[fetchSampleData] Fetching data for table: ${tableName} (source: ${sourceTable})`);
+
   try {
     // Get row count
-    const { count } = await client
+    const { count, error: countError } = await client
       .from(tableName)
       .select('*', { count: 'exact', head: true });
+
+    if (countError) {
+      console.error(`[fetchSampleData] Count error for ${tableName}:`, countError.message);
+    }
 
     // Get sample rows
     const { data: rows, error } = await client
       .from(tableName)
       .select('*')
-      .limit(10);
+      .limit(20);
 
-    if (error || !rows) {
+    if (error) {
+      console.error(`[fetchSampleData] Query error for ${tableName}:`, error.message);
       return { columns: [], rows: [], total: 0 };
     }
 
-    // Extract column info from first row
-    const columns = rows.length > 0
-      ? Object.keys(rows[0]).map((key) => ({
-          name: key,
-          type: typeof rows[0][key],
-        }))
-      : [];
+    if (!rows || rows.length === 0) {
+      console.log(`[fetchSampleData] No rows returned for ${tableName}, count: ${count}`);
+      return { columns: [], rows: [], total: count || 0 };
+    }
+
+    // Extract column info from first row with better type inference
+    const columns = Object.keys(rows[0]).map((key) => ({
+      name: key,
+      type: inferColumnType(rows[0][key]),
+    }));
+
+    console.log(`[fetchSampleData] Success: ${rows.length} rows, ${columns.length} columns for ${tableName}`);
 
     return {
       columns,
       rows,
-      total: count || 0,
+      total: count || rows.length,
     };
-  } catch {
+  } catch (err) {
+    console.error(`[fetchSampleData] Exception for ${tableName}:`, err);
     return { columns: [], rows: [], total: 0 };
   }
+}
+
+function inferColumnType(value: any): string {
+  if (value === null || value === undefined) return 'unknown';
+  if (typeof value === 'number') return Number.isInteger(value) ? 'integer' : 'decimal';
+  if (typeof value === 'boolean') return 'boolean';
+  if (typeof value === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}/.test(value)) return 'datetime';
+    return 'text';
+  }
+  if (Array.isArray(value)) return 'array';
+  if (typeof value === 'object') return 'json';
+  return typeof value;
 }
 
 function generateRecommendations(factors: TrustFactor[]): string[] {

@@ -112,12 +112,23 @@ Always respond with a JSON object containing:
       // Determine scan mode
       const mode = context?.parameters?.mode || 'full_scan';
       const targetSchema = context?.parameters?.targetSchema || 'meridian';
+      const targetTable = context?.parameters?.targetTable;
 
-      await this.log('scan_mode', `Scanning in ${mode} mode for schema: ${targetSchema}`);
+      await this.log('scan_mode', `Scanning in ${mode} mode for schema: ${targetSchema}${targetTable ? `, table: ${targetTable}` : ''}`);
 
       // Step 1: Discover tables in the schema
-      const tables = await this.discoverTables(targetSchema);
-      await this.log('tables_discovered', `Found ${tables.length} tables/views in ${targetSchema} schema`, {
+      let tables = await this.discoverTables(targetSchema);
+
+      // Filter to single table if specified
+      if (targetTable) {
+        tables = tables.filter(t => t.table_name === targetTable || t.table_name === targetTable.replace(`${targetSchema}.`, ''));
+        if (tables.length === 0) {
+          // Table not in known list, try to profile it directly
+          tables = [{ table_name: targetTable.replace(`${targetSchema}.`, ''), table_type: 'table' }];
+        }
+      }
+
+      await this.log('tables_discovered', `Found ${tables.length} tables/views to process`, {
         tables: tables.map(t => t.table_name),
       });
 
