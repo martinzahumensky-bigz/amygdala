@@ -56,8 +56,30 @@ export async function GET(request: Request, { params }: RouteParams) {
       sampleData = await fetchSampleData(meridianClient, asset.source_table);
     }
 
+    // Get column profiles
+    const { data: columnProfiles } = await supabase
+      .from('column_profiles')
+      .select('*')
+      .eq('asset_id', assetId)
+      .order('column_name');
+
+    // Get quality rules
+    const { data: qualityRules } = await supabase
+      .from('quality_rules')
+      .select('*')
+      .eq('asset_id', assetId)
+      .order('rule_type');
+
     // Generate recommendations based on trust factors
     const recommendations = generateRecommendations(trustBreakdown.factors);
+
+    // Transform column profiles to include is_sensitive flag based on semantic type
+    const enrichedProfiles = (columnProfiles || []).map((profile: any) => ({
+      ...profile,
+      is_sensitive: ['email', 'phone', 'address', 'ssn', 'credit_card', 'password'].includes(
+        profile.inferred_semantic_type?.toLowerCase() || ''
+      ),
+    }));
 
     return NextResponse.json({
       asset,
@@ -69,6 +91,8 @@ export async function GET(request: Request, { params }: RouteParams) {
       issues: issues || [],
       lineage,
       sampleData,
+      columnProfiles: enrichedProfiles,
+      qualityRules: qualityRules || [],
     });
   } catch (error) {
     console.error('Asset detail error:', error);

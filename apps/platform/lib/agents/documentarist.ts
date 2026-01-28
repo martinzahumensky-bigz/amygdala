@@ -445,10 +445,122 @@ Always respond with a JSON object containing:
     if (nameLower.includes('description')) return 'description';
     if (nameLower.includes('status')) return 'status';
     if (nameLower.includes('type')) return 'category';
+    if (nameLower.includes('ssn') || nameLower.includes('social_security')) return 'ssn';
+    if (nameLower.includes('credit_card') || nameLower.includes('card_number')) return 'credit_card';
+    if (nameLower.includes('password') || nameLower.includes('secret')) return 'password';
+    if (nameLower.includes('dob') || nameLower.includes('birth')) return 'date_of_birth';
+    if (nameLower.includes('salary') || nameLower.includes('income')) return 'salary';
     if (dataType === 'boolean') return 'boolean';
     if (dataType === 'integer' || dataType === 'numeric') return 'numeric';
 
     return 'text';
+  }
+
+  /**
+   * Detects sensitive columns based on semantic type and naming patterns
+   */
+  private detectSensitiveColumns(columns: ColumnProfile[]): string[] {
+    const sensitiveTypes = ['email', 'phone', 'ssn', 'credit_card', 'password', 'address', 'date_of_birth', 'salary'];
+    const sensitivePatterns = ['email', 'phone', 'ssn', 'social', 'credit', 'card', 'password', 'secret', 'dob', 'birth', 'salary', 'income', 'address'];
+
+    return columns
+      .filter(col => {
+        // Check semantic type
+        if (sensitiveTypes.includes(col.inferred_semantic_type || '')) return true;
+        // Check column name patterns
+        const nameLower = col.name.toLowerCase();
+        return sensitivePatterns.some(pattern => nameLower.includes(pattern));
+      })
+      .map(col => col.name);
+  }
+
+  /**
+   * Generates business term mappings based on column names and table context
+   */
+  private generateBusinessTerms(tableName: string, columns: ColumnProfile[]): Record<string, string> {
+    const terms: Record<string, string> = {};
+    const nameLower = tableName.toLowerCase();
+
+    // Table-level business terms
+    if (nameLower.includes('customer')) {
+      terms['Customer'] = 'An individual or organization that has a business relationship with Meridian Bank';
+    }
+    if (nameLower.includes('transaction')) {
+      terms['Transaction'] = 'A financial event representing money movement between accounts';
+    }
+    if (nameLower.includes('loan')) {
+      terms['Loan'] = 'A financial product where the bank lends money to a customer';
+    }
+    if (nameLower.includes('account')) {
+      terms['Account'] = 'A financial arrangement where a customer holds money with the bank';
+    }
+    if (nameLower.includes('branch')) {
+      terms['Branch'] = 'A physical location where banking services are provided';
+    }
+    if (nameLower.includes('revenue')) {
+      terms['Revenue'] = 'Income generated from banking operations and services';
+    }
+
+    // Column-level business terms
+    for (const col of columns) {
+      const colLower = col.name.toLowerCase();
+
+      if (colLower.includes('ltv') || colLower.includes('loan_to_value')) {
+        terms['LTV Ratio'] = 'Loan-to-Value ratio: The ratio of the loan amount to the value of the collateral';
+      }
+      if (colLower.includes('aum') || colLower.includes('assets_under')) {
+        terms['AUM'] = 'Assets Under Management: Total value of assets managed for customers';
+      }
+      if (colLower.includes('kyc')) {
+        terms['KYC'] = 'Know Your Customer: Regulatory process to verify customer identity';
+      }
+      if (colLower.includes('aml')) {
+        terms['AML'] = 'Anti-Money Laundering: Processes to detect and prevent money laundering';
+      }
+      if (colLower === 'customer_id') {
+        terms['Customer ID'] = 'Unique identifier for a customer in the banking system';
+      }
+      if (colLower === 'branch_id') {
+        terms['Branch ID'] = 'Unique identifier for a bank branch location';
+      }
+      if (colLower.includes('segment')) {
+        terms['Customer Segment'] = 'Classification of customers based on value, behavior, or demographics';
+      }
+    }
+
+    return terms;
+  }
+
+  /**
+   * Determines data classification based on sensitive columns and table type
+   */
+  private determineDataClassification(
+    sensitiveColumns: string[],
+    tableName: string
+  ): 'public' | 'internal' | 'confidential' | 'restricted' {
+    // Restricted: Contains highly sensitive PII
+    const restrictedPatterns = ['ssn', 'social_security', 'credit_card', 'password'];
+    if (sensitiveColumns.some(col => restrictedPatterns.some(p => col.toLowerCase().includes(p)))) {
+      return 'restricted';
+    }
+
+    // Confidential: Contains PII
+    if (sensitiveColumns.length > 0) {
+      return 'confidential';
+    }
+
+    // Internal: Business data without PII
+    const nameLower = tableName.toLowerCase();
+    if (nameLower.includes('gold') || nameLower.includes('silver')) {
+      return 'internal';
+    }
+
+    // Public: Reference data
+    if (nameLower.startsWith('ref_') || nameLower.startsWith('dim_')) {
+      return 'public';
+    }
+
+    return 'internal';
   }
 
   private async classifyAsset(
@@ -579,7 +691,31 @@ Always respond with a JSON object containing:
     // Calculate initial quality score
     const qualityScore = fitnessStatus === 'green' ? 85 : fitnessStatus === 'amber' ? 65 : 45;
 
-    const { error } = await this.amygdalaClient.from('assets').insert({
+    // Detect sensitive columns
+    const sensitiveColumns = asset.profile
+      ? this.detectSensitiveColumns(asset.profile.columns)
+      : [];
+
+    // Generate business terms
+    const businessTerms = asset.profile
+      ? this.generateBusinessTerms(asset.name, asset.profile.columns)
+      : {};
+
+    // Determine data classification
+    const dataClassification = this.determineDataClassification(sensitiveColumns, asset.name);
+
+    // Build metadata object
+    const metadata = {
+      sensitive_columns: sensitiveColumns,
+      business_terms: businessTerms,
+      data_classification: dataClassification,
+      row_count: asset.profile?.row_count,
+      column_count: asset.profile?.column_count,
+      refresh_schedule: asset.layer === 'gold' ? 'daily' : asset.layer === 'silver' ? 'hourly' : 'real-time',
+      last_refresh: new Date().toISOString(),
+    };
+
+    const { data: insertedAsset, error } = await this.amygdalaClient.from('assets').insert({
       name: asset.name,
       asset_type: asset.asset_type,
       layer: asset.layer,
@@ -591,35 +727,128 @@ Always respond with a JSON object containing:
       fitness_status: fitnessStatus,
       trust_score_stars: fitnessStatus === 'green' ? 4 : fitnessStatus === 'amber' ? 3 : 2,
       trust_score_raw: qualityScore / 100,
+      metadata: metadata,
       created_by: this.name,
-    });
+    }).select('id').single();
 
     if (error) {
       throw new Error(`Failed to create asset: ${error.message}`);
+    }
+
+    // Store column profiles in column_profiles table
+    if (insertedAsset && asset.profile && asset.profile.columns.length > 0) {
+      const columnProfileRecords = asset.profile.columns.map(col => ({
+        asset_id: insertedAsset.id,
+        column_name: col.name,
+        data_type: col.data_type,
+        inferred_semantic_type: col.inferred_semantic_type,
+        null_count: col.null_count,
+        null_percentage: col.null_percentage,
+        distinct_count: col.distinct_count,
+        distinct_percentage: col.distinct_percentage,
+        min_value: col.min_value !== undefined ? JSON.stringify(col.min_value) : null,
+        max_value: col.max_value !== undefined ? JSON.stringify(col.max_value) : null,
+        mean_value: col.mean_value,
+        top_values: col.top_values || [],
+      }));
+
+      const { error: profileError } = await this.amygdalaClient
+        .from('column_profiles')
+        .insert(columnProfileRecords);
+
+      if (profileError) {
+        await this.log('profile_insert_warning', `Could not insert column profiles: ${profileError.message}`);
+      }
     }
 
     await this.log('asset_created', `Created new asset: ${asset.name}`, {
       layer: asset.layer,
       fitnessStatus,
       qualityScore,
+      sensitiveColumns: sensitiveColumns.length,
+      businessTerms: Object.keys(businessTerms).length,
+      dataClassification,
     });
   }
 
   private async updateAssetProfile(asset: DiscoveredAsset): Promise<void> {
-    // Update just the profile-related fields
+    // Update profile-related fields and metadata
     if (!asset.profile) return;
+
+    // Detect sensitive columns
+    const sensitiveColumns = this.detectSensitiveColumns(asset.profile.columns);
+
+    // Generate business terms
+    const businessTerms = this.generateBusinessTerms(asset.name, asset.profile.columns);
+
+    // Determine data classification
+    const dataClassification = this.determineDataClassification(sensitiveColumns, asset.name);
+
+    // Get the existing asset
+    const { data: existingAsset } = await this.amygdalaClient
+      .from('assets')
+      .select('id, metadata')
+      .eq('name', asset.name)
+      .single();
+
+    if (!existingAsset) return;
+
+    // Merge new metadata with existing
+    const existingMetadata = existingAsset.metadata || {};
+    const updatedMetadata = {
+      ...existingMetadata,
+      sensitive_columns: sensitiveColumns,
+      business_terms: { ...existingMetadata.business_terms, ...businessTerms },
+      data_classification: dataClassification,
+      row_count: asset.profile.row_count,
+      column_count: asset.profile.column_count,
+      last_refresh: new Date().toISOString(),
+    };
 
     const { error } = await this.amygdalaClient
       .from('assets')
       .update({
+        metadata: updatedMetadata,
         updated_at: new Date().toISOString(),
       })
       .eq('name', asset.name);
 
     if (error) {
-      // Non-critical, just log
       await this.log('update_skipped', `Could not update ${asset.name}: ${error.message}`);
+      return;
     }
+
+    // Update column profiles - delete old ones first, then insert new
+    await this.amygdalaClient
+      .from('column_profiles')
+      .delete()
+      .eq('asset_id', existingAsset.id);
+
+    if (asset.profile.columns.length > 0) {
+      const columnProfileRecords = asset.profile.columns.map(col => ({
+        asset_id: existingAsset.id,
+        column_name: col.name,
+        data_type: col.data_type,
+        inferred_semantic_type: col.inferred_semantic_type,
+        null_count: col.null_count,
+        null_percentage: col.null_percentage,
+        distinct_count: col.distinct_count,
+        distinct_percentage: col.distinct_percentage,
+        min_value: col.min_value !== undefined ? JSON.stringify(col.min_value) : null,
+        max_value: col.max_value !== undefined ? JSON.stringify(col.max_value) : null,
+        mean_value: col.mean_value,
+        top_values: col.top_values || [],
+      }));
+
+      await this.amygdalaClient
+        .from('column_profiles')
+        .insert(columnProfileRecords);
+    }
+
+    await this.log('asset_updated', `Updated asset profile: ${asset.name}`, {
+      sensitiveColumns: sensitiveColumns.length,
+      businessTerms: Object.keys(businessTerms).length,
+    });
   }
 
   private async createOwnershipIssue(asset: DiscoveredAsset): Promise<void> {

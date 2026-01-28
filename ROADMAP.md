@@ -201,7 +201,46 @@
 
 ---
 
-### FEAT-012: Ataccama Salesforce Data Integration
+### FEAT-017: Enhanced Catalog Pages with Tabbed Interface
+**GitHub Issue:** #4
+**Status:** In Progress
+**Original Prompt:** "Improve cataloging pages with comprehensive tabs for overview, profiling, quality, preview, lineage, and transformations"
+
+**Overview Tab (Documentarist)**
+- [ ] Dataset metadata (name, type, layer, source system)
+- [ ] Business description and context
+- [ ] Sensitive data indicators
+- [ ] Business terms/glossary mapping
+- [ ] Data usage information
+
+**Profiling Tab**
+- [ ] Column-level statistics (null %, distinct, min/max/mean)
+- [ ] Data format patterns and masks
+- [ ] AI-interpreted anomaly highlights
+- [ ] Semantic type detection
+
+**Quality Tab**
+- [ ] Overall quality score with breakdown
+- [ ] Applied quality rules list
+- [ ] Attribute-level quality indicators
+
+**Preview Tab**
+- [ ] Paginated sample data table
+- [ ] Column type indicators
+- [ ] NULL value highlighting
+
+**Lineage Tab**
+- [ ] Visual lineage diagram
+- [ ] AI-explained data flow
+- [ ] Pipeline/transformation details
+
+**Transformations Tab**
+- [ ] Agent-generated improvements
+- [ ] Transformation history
+
+---
+
+### FEAT-018: Ataccama Salesforce Data Integration (was FEAT-012)
 **Status:** Planned
 **GitHub Issue:** TBD
 **Original Prompt:** "Add Ataccama Salesforce data to Meridian app to showcase real enterprise data patterns"
