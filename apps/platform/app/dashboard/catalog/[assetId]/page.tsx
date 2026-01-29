@@ -43,7 +43,10 @@ import {
   TrendingDown,
   Percent,
   Box,
+  Layers,
 } from 'lucide-react';
+import { DataStructureTab } from '@/components/catalog';
+import { InlineTextEdit, InlineSelectEdit } from '@/components/catalog';
 
 // ========== TYPES ==========
 interface Asset {
@@ -190,6 +193,7 @@ const factorIcons: Record<string, any> = {
 
 const tabs = [
   { id: 'overview', label: 'Overview', icon: FileText },
+  { id: 'structure', label: 'Data Structure', icon: Layers },
   { id: 'profiling', label: 'Profiling', icon: BarChart3 },
   { id: 'quality', label: 'Quality', icon: Shield },
   { id: 'preview', label: 'Preview', icon: Table2 },
@@ -317,11 +321,13 @@ function OverviewTab({
   trustBreakdown,
   issues,
   openChat,
+  onAssetUpdate,
 }: {
   asset: Asset;
   trustBreakdown: { overall: number; factors: TrustFactor[]; recommendations: string[] };
   issues: any[];
   openChat: (ctx: any) => void;
+  onAssetUpdate?: (updates: Partial<Asset>) => Promise<void>;
 }) {
   const metadata = asset.metadata || {};
 
@@ -389,37 +395,73 @@ function OverviewTab({
                   <User className="h-4 w-4 text-gray-400" />
                   <span className="text-sm text-gray-600 dark:text-gray-400">Owner</span>
                 </div>
-                <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {asset.owner || <span className="text-yellow-600">Not assigned</span>}
-                </span>
+                {onAssetUpdate ? (
+                  <InlineTextEdit
+                    value={asset.owner}
+                    onSave={async (value) => {
+                      await onAssetUpdate({ owner: value });
+                    }}
+                    placeholder="Not assigned"
+                  />
+                ) : (
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    {asset.owner || <span className="text-yellow-600">Not assigned</span>}
+                  </span>
+                )}
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-gray-400" />
                   <span className="text-sm text-gray-600 dark:text-gray-400">Steward</span>
                 </div>
-                <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {asset.steward || <span className="text-yellow-600">Not assigned</span>}
-                </span>
+                {onAssetUpdate ? (
+                  <InlineTextEdit
+                    value={asset.steward}
+                    onSave={async (value) => {
+                      await onAssetUpdate({ steward: value });
+                    }}
+                    placeholder="Not assigned"
+                  />
+                ) : (
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    {asset.steward || <span className="text-yellow-600">Not assigned</span>}
+                  </span>
+                )}
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Lock className="h-4 w-4 text-gray-400" />
                   <span className="text-sm text-gray-600 dark:text-gray-400">Classification</span>
                 </div>
-                <Badge
-                  className={
-                    metadata.data_classification === 'restricted'
-                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                      : metadata.data_classification === 'confidential'
-                      ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-                      : metadata.data_classification === 'internal'
-                      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                      : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                  }
-                >
-                  {metadata.data_classification || 'Internal'}
-                </Badge>
+                {onAssetUpdate ? (
+                  <InlineSelectEdit
+                    value={metadata.data_classification || 'internal'}
+                    options={[
+                      { value: 'public', label: 'Public' },
+                      { value: 'internal', label: 'Internal' },
+                      { value: 'confidential', label: 'Confidential' },
+                      { value: 'restricted', label: 'Restricted' },
+                    ]}
+                    onSave={async (value) => {
+                      await onAssetUpdate({ metadata: { ...metadata, data_classification: value } } as any);
+                    }}
+                    placeholder="Select..."
+                  />
+                ) : (
+                  <Badge
+                    className={
+                      metadata.data_classification === 'restricted'
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                        : metadata.data_classification === 'confidential'
+                        ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                        : metadata.data_classification === 'internal'
+                        ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                        : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                    }
+                  >
+                    {metadata.data_classification || 'Internal'}
+                  </Badge>
+                )}
               </div>
             </div>
           </CardContent>
@@ -1768,6 +1810,53 @@ export default function AssetDetailPage({
     }
   };
 
+  const handleAssetUpdate = async (updates: Partial<Asset>) => {
+    try {
+      // Handle classification separately (it's in metadata)
+      const body: Record<string, any> = { ...updates };
+      if ('metadata' in updates && updates.metadata?.data_classification) {
+        body.classification = updates.metadata.data_classification;
+        delete body.metadata;
+      }
+
+      const res = await fetch(`/api/assets/${assetId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to update asset');
+      }
+
+      // Refresh data
+      await fetchAsset();
+    } catch (err) {
+      console.error('Update failed:', err);
+      throw err;
+    }
+  };
+
+  const handleColumnUpdate = async (columnName: string, updates: Partial<ColumnProfile>) => {
+    try {
+      const res = await fetch(`/api/assets/${assetId}/columns`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ columnName, ...updates }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to update column');
+      }
+
+      // Refresh data
+      await fetchAsset();
+    } catch (err) {
+      console.error('Column update failed:', err);
+      throw err;
+    }
+  };
+
   useEffect(() => {
     fetchAsset();
   }, [assetId]);
@@ -1920,6 +2009,16 @@ export default function AssetDetailPage({
               trustBreakdown={trustBreakdown}
               issues={issues}
               openChat={openChat}
+              onAssetUpdate={handleAssetUpdate}
+            />
+          )}
+          {activeTab === 'structure' && (
+            <DataStructureTab
+              assetId={asset.id}
+              assetName={asset.name}
+              columnProfiles={columnProfiles || []}
+              openChat={openChat}
+              onColumnUpdate={handleColumnUpdate}
             />
           )}
           {activeTab === 'profiling' && (

@@ -19,6 +19,18 @@ export interface ColumnProfile {
   max_value?: unknown;
   mean_value?: number;
   top_values: Array<{ value: string; count: number }>;
+  // New fields for Data Structure tab (FEAT-020)
+  description?: string;
+  business_terms?: string[];
+  classifications?: string[];
+  highlights?: Array<{ type: 'info' | 'warning' | 'error'; message: string }>;
+  quality_rules?: Array<{
+    id: string;
+    name: string;
+    rule_type: string;
+    pass_rate?: number;
+    threshold?: number;
+  }>;
 }
 
 export interface Profile {

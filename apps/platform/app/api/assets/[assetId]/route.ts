@@ -91,10 +91,22 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Generate recommendations based on trust factors
     const recommendations = generateRecommendations(trustBreakdown.factors);
 
+    // Group quality rules by target_column for enrichment
+    const rulesByColumn: Record<string, any[]> = {};
+    for (const rule of qualityRules || []) {
+      const colName = (rule as any).target_column || '_asset_level';
+      if (!rulesByColumn[colName]) {
+        rulesByColumn[colName] = [];
+      }
+      rulesByColumn[colName].push(rule);
+    }
+
     // Transform column profiles to match UI expectations:
     // - Map column_name to name
     // - Add is_sensitive flag
     // - Parse min/max values if stored as JSON strings
+    // - Include new fields: description, business_terms, classifications, highlights
+    // - Include quality_rules for this column
     const enrichedProfiles = (columnProfiles || []).map((profile: any) => {
       // Parse min_value and max_value if they're JSON strings
       let minVal = profile.min_value;
@@ -110,6 +122,16 @@ export async function GET(request: Request, { params }: RouteParams) {
         // Keep original values if parsing fails
       }
 
+      // Get classifications array
+      const classifications = profile.classifications || [];
+
+      // Determine if sensitive based on classifications or semantic type
+      const isSensitive = classifications.some((c: string) =>
+        ['PII', 'PHI', 'PCI', 'Sensitive'].includes(c)
+      ) || ['email', 'phone', 'address', 'ssn', 'credit_card', 'password'].includes(
+        profile.inferred_semantic_type?.toLowerCase() || ''
+      );
+
       return {
         // Map database column names to UI expected names
         name: profile.column_name,
@@ -123,9 +145,15 @@ export async function GET(request: Request, { params }: RouteParams) {
         max_value: maxVal,
         mean_value: profile.mean_value,
         top_values: profile.top_values || [],
-        is_sensitive: ['email', 'phone', 'address', 'ssn', 'credit_card', 'password'].includes(
-          profile.inferred_semantic_type?.toLowerCase() || ''
-        ),
+        // New fields for Data Structure tab
+        description: profile.description,
+        business_terms: profile.business_terms || [],
+        classifications: classifications,
+        highlights: profile.highlights || [],
+        // Quality rules for this column
+        quality_rules: rulesByColumn[profile.column_name] || [],
+        // Computed flags
+        is_sensitive: isSensitive,
       };
     });
 
@@ -155,9 +183,16 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const { assetId } = await params;
     const body = await request.json();
-    const { owner, steward, description, business_context, tags } = body;
+    const { owner, steward, description, business_context, tags, classification } = body;
 
     const supabase = getAmygdalaClient();
+
+    // Get existing asset for metadata merge
+    const { data: existingAsset } = await supabase
+      .from('assets')
+      .select('metadata')
+      .eq('id', assetId)
+      .single();
 
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
@@ -168,6 +203,15 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     if (description !== undefined) updates.description = description;
     if (business_context !== undefined) updates.business_context = business_context;
     if (tags !== undefined) updates.tags = tags;
+
+    // Handle classification update (stored in metadata)
+    if (classification !== undefined) {
+      const existingMetadata = existingAsset?.metadata || {};
+      updates.metadata = {
+        ...existingMetadata,
+        data_classification: classification,
+      };
+    }
 
     const { data, error } = await supabase
       .from('assets')

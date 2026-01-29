@@ -650,19 +650,269 @@ Always respond with a JSON object containing:
     // Infer semantic type
     const semanticType = this.inferSemanticType(column.column_name, column.data_type, topValues);
 
+    // Generate per-column metadata
+    const nullPercentage = totalRows > 0 ? ((nullCount || 0) / totalRows) * 100 : 0;
+    const classifications = this.detectColumnClassifications(column.column_name, semanticType);
+    const businessTerms = this.generateColumnBusinessTerms(tableName, column.column_name, semanticType);
+    const description = this.generateColumnDescription(column.column_name, column.data_type, semanticType, nullPercentage, distinctCount);
+    const highlights = this.generateColumnHighlights(column.column_name, nullPercentage, distinctCount, totalRows);
+
     return {
       name: column.column_name,
       data_type: column.data_type,
       inferred_semantic_type: semanticType,
       null_count: nullCount || 0,
-      null_percentage: totalRows > 0 ? ((nullCount || 0) / totalRows) * 100 : 0,
+      null_percentage: nullPercentage,
       distinct_count: distinctCount,
       distinct_percentage: totalRows > 0 ? (distinctCount / Math.min(totalRows, 1000)) * 100 : 0,
       min_value: minValue,
       max_value: maxValue,
       mean_value: meanValue,
       top_values: topValues,
+      // New per-column metadata fields
+      description,
+      business_terms: businessTerms,
+      classifications,
+      highlights,
     };
+  }
+
+  /**
+   * Detects classifications for a column based on semantic type (Atlan-style)
+   * Returns array of classification tags: PII, PHI, PCI, Sensitive, Confidential, Internal, Public
+   */
+  private detectColumnClassifications(columnName: string, semanticType: string): string[] {
+    const classifications: string[] = [];
+    const nameLower = columnName.toLowerCase();
+
+    // PII (Personally Identifiable Information)
+    const piiTypes = ['email', 'phone', 'address', 'name', 'date_of_birth', 'ssn', 'postal_code'];
+    const piiPatterns = ['email', 'phone', 'mobile', 'address', 'first_name', 'last_name', 'full_name', 'dob', 'birth', 'ssn', 'social'];
+    if (piiTypes.includes(semanticType) || piiPatterns.some(p => nameLower.includes(p))) {
+      classifications.push('PII');
+    }
+
+    // PHI (Protected Health Information)
+    const phiPatterns = ['diagnosis', 'medical', 'health', 'patient', 'prescription', 'treatment', 'icd', 'condition'];
+    if (phiPatterns.some(p => nameLower.includes(p))) {
+      classifications.push('PHI');
+    }
+
+    // PCI (Payment Card Information)
+    const pciTypes = ['credit_card'];
+    const pciPatterns = ['card_number', 'credit_card', 'cvv', 'card_expir', 'pan'];
+    if (pciTypes.includes(semanticType) || pciPatterns.some(p => nameLower.includes(p))) {
+      classifications.push('PCI');
+      if (!classifications.includes('PII')) classifications.push('PII');
+    }
+
+    // Sensitive (general sensitive data)
+    const sensitiveTypes = ['password', 'ssn'];
+    const sensitivePatterns = ['password', 'secret', 'token', 'api_key', 'credential', 'salary', 'income', 'balance'];
+    if (sensitiveTypes.includes(semanticType) || sensitivePatterns.some(p => nameLower.includes(p))) {
+      if (!classifications.includes('PII') && !classifications.includes('PCI') && !classifications.includes('PHI')) {
+        classifications.push('Sensitive');
+      }
+    }
+
+    // Confidential (business confidential)
+    const confidentialPatterns = ['revenue', 'profit', 'margin', 'forecast', 'budget', 'cost'];
+    if (confidentialPatterns.some(p => nameLower.includes(p))) {
+      classifications.push('Confidential');
+    }
+
+    return classifications;
+  }
+
+  /**
+   * Generates business terms for a column (multiple terms as array)
+   */
+  private generateColumnBusinessTerms(tableName: string, columnName: string, semanticType: string): string[] {
+    const terms: string[] = [];
+    const nameLower = columnName.toLowerCase();
+    const tableNameLower = tableName.toLowerCase();
+
+    // Semantic type based terms
+    const semanticTerms: Record<string, string> = {
+      email: 'Email Address',
+      phone: 'Phone Number',
+      address: 'Physical Address',
+      name: 'Person Name',
+      city: 'City Name',
+      state: 'State/Province',
+      postal_code: 'Postal Code',
+      country: 'Country',
+      datetime: 'Timestamp',
+      currency: 'Monetary Amount',
+      percentage: 'Percentage Value',
+      identifier: 'Unique Identifier',
+      status: 'Status Code',
+      category: 'Category Type',
+      date_of_birth: 'Date of Birth',
+    };
+
+    if (semanticTerms[semanticType]) {
+      terms.push(semanticTerms[semanticType]);
+    }
+
+    // Column name pattern based terms
+    if (nameLower === 'customer_id' || nameLower === 'cust_id') {
+      terms.push('Customer Identifier');
+    }
+    if (nameLower === 'branch_id') {
+      terms.push('Branch Identifier');
+    }
+    if (nameLower === 'account_id') {
+      terms.push('Account Number');
+    }
+    if (nameLower === 'transaction_id') {
+      terms.push('Transaction Reference');
+    }
+    if (nameLower.includes('amount')) {
+      terms.push('Transaction Amount');
+    }
+    if (nameLower.includes('balance')) {
+      terms.push('Account Balance');
+    }
+    if (nameLower.includes('ltv') || nameLower.includes('loan_to_value')) {
+      terms.push('Loan-to-Value Ratio');
+    }
+    if (nameLower.includes('interest_rate')) {
+      terms.push('Interest Rate');
+    }
+    if (nameLower.includes('segment')) {
+      terms.push('Customer Segment');
+    }
+
+    // Table context based terms
+    if (tableNameLower.includes('customer') && nameLower.includes('id')) {
+      if (!terms.includes('Customer Identifier')) terms.push('Customer Identifier');
+    }
+    if (tableNameLower.includes('transaction')) {
+      if (nameLower === 'type' || nameLower === 'transaction_type') {
+        terms.push('Transaction Type');
+      }
+    }
+
+    return terms;
+  }
+
+  /**
+   * Generates a description for a column
+   */
+  private generateColumnDescription(
+    columnName: string,
+    dataType: string,
+    semanticType: string,
+    nullPercentage: number,
+    distinctCount: number
+  ): string {
+    const nameLower = columnName.toLowerCase();
+
+    // Pre-defined descriptions for common columns
+    const descriptions: Record<string, string> = {
+      id: 'Unique identifier for the record',
+      customer_id: 'Unique identifier linking to the customer record',
+      account_id: 'Unique identifier for the bank account',
+      branch_id: 'Reference to the branch where the transaction occurred',
+      transaction_id: 'Unique reference number for the transaction',
+      email: 'Customer email address for communication',
+      phone: 'Customer phone number for contact',
+      first_name: 'Customer first/given name',
+      last_name: 'Customer family/surname',
+      full_name: 'Complete name of the customer',
+      date_of_birth: 'Customer date of birth for age verification',
+      address: 'Physical street address',
+      city: 'City of residence or location',
+      state: 'State or province',
+      zip_code: 'Postal/ZIP code',
+      amount: 'Monetary value of the transaction',
+      balance: 'Current account balance',
+      transaction_type: 'Type of transaction (deposit, withdrawal, transfer)',
+      status: 'Current status of the record',
+      created_at: 'Timestamp when the record was created',
+      updated_at: 'Timestamp when the record was last modified',
+      interest_rate: 'Annual percentage rate for the loan or account',
+      ltv_ratio: 'Loan-to-value ratio comparing loan amount to collateral value',
+      segment_id: 'Reference to customer segmentation category',
+      product_id: 'Reference to the product or service',
+    };
+
+    if (descriptions[nameLower]) {
+      return descriptions[nameLower];
+    }
+
+    // Generate description based on patterns
+    if (nameLower.endsWith('_id')) {
+      const entity = nameLower.replace('_id', '').replace(/_/g, ' ');
+      return `Reference identifier for the ${entity}`;
+    }
+    if (nameLower.endsWith('_at') || nameLower.endsWith('_date')) {
+      return `Timestamp or date field for tracking ${nameLower.replace(/_at$|_date$/, '').replace(/_/g, ' ')} events`;
+    }
+    if (nameLower.includes('total') || nameLower.includes('sum')) {
+      return `Aggregated total value for ${nameLower.replace(/total_|sum_|_total|_sum/g, '').replace(/_/g, ' ')}`;
+    }
+    if (nameLower.includes('count')) {
+      return `Count of ${nameLower.replace(/count_|_count/g, '').replace(/_/g, ' ')}`;
+    }
+    if (nameLower.includes('avg') || nameLower.includes('average')) {
+      return `Average value of ${nameLower.replace(/avg_|average_|_avg|_average/g, '').replace(/_/g, ' ')}`;
+    }
+
+    // Fallback
+    return `${semanticType !== 'text' ? semanticType.charAt(0).toUpperCase() + semanticType.slice(1) : 'Text'} field: ${columnName.replace(/_/g, ' ')}`;
+  }
+
+  /**
+   * Generates highlights/warnings for a column
+   */
+  private generateColumnHighlights(
+    columnName: string,
+    nullPercentage: number,
+    distinctCount: number,
+    totalRows: number
+  ): Array<{ type: 'info' | 'warning' | 'error'; message: string }> {
+    const highlights: Array<{ type: 'info' | 'warning' | 'error'; message: string }> = [];
+
+    // High null percentage
+    if (nullPercentage > 50) {
+      highlights.push({
+        type: 'error',
+        message: `High null rate: ${nullPercentage.toFixed(1)}% missing values`,
+      });
+    } else if (nullPercentage > 20) {
+      highlights.push({
+        type: 'warning',
+        message: `${nullPercentage.toFixed(1)}% null values`,
+      });
+    }
+
+    // Low cardinality check (potential enum/category)
+    if (totalRows > 100 && distinctCount <= 10 && distinctCount > 1) {
+      highlights.push({
+        type: 'info',
+        message: `Low cardinality: only ${distinctCount} distinct values`,
+      });
+    }
+
+    // Potential unique identifier
+    if (totalRows > 0 && distinctCount === Math.min(totalRows, 1000)) {
+      highlights.push({
+        type: 'info',
+        message: 'Appears to be a unique identifier',
+      });
+    }
+
+    // Single value (constant column)
+    if (distinctCount === 1 && totalRows > 10) {
+      highlights.push({
+        type: 'warning',
+        message: 'Only one distinct value - may be redundant',
+      });
+    }
+
+    return highlights;
   }
 
   private inferSemanticType(
@@ -993,6 +1243,11 @@ Always respond with a JSON object containing:
         max_value: col.max_value !== undefined ? JSON.stringify(col.max_value) : null,
         mean_value: col.mean_value,
         top_values: col.top_values || [],
+        // New per-column metadata fields
+        description: col.description,
+        business_terms: col.business_terms || [],
+        classifications: col.classifications || [],
+        highlights: col.highlights || [],
       }));
 
       const { error: profileError } = await this.amygdalaClient
@@ -1086,6 +1341,11 @@ Always respond with a JSON object containing:
         mean_value: col.mean_value || null,
         top_values: col.top_values || [],
         profiled_at: new Date().toISOString(),
+        // New per-column metadata fields
+        description: col.description,
+        business_terms: col.business_terms || [],
+        classifications: col.classifications || [],
+        highlights: col.highlights || [],
       }));
 
       const { error: insertError } = await this.amygdalaClient

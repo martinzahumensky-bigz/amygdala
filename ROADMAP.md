@@ -364,20 +364,115 @@ Mastering Agent:
 
 ## MVP Phase (Weeks 4-8)
 
-### FEAT-010: Quality Agent
-**Status:** Planned
+### Quality Agent
+**Status:** Completed ✅
+**Implemented in:** FEAT-009 & FEAT-017
 
-### FEAT-011: Trust Agent
-**Status:** Planned
+- [x] Rule generation based on column profiling
+- [x] Rule types: null_check, range_check, pattern_check, uniqueness, referential, custom
+- [x] Rule validation with pass/fail rates
+- [x] Issue creation for failed validations
+- [x] Quality scoring per asset
+- [x] Quality tab in catalog pages
 
-### FEAT-012: Documentarist Agent
-**Status:** Planned
+---
 
-### FEAT-013: Transformation Agent
-**Status:** Planned
+### Trust Agent
+**Status:** Completed ✅
+**Implemented in:** FEAT-010
 
-### FEAT-014: Agent Orchestration
+- [x] 6-factor trust calculation (Documentation, Governance, Quality, Usage, Reliability, Freshness)
+- [x] Trust score monitoring and trend detection
+- [x] Issue creation for trust drops (>15% alert, >25% critical)
+- [x] Low trust asset flagging
+- [x] Historical snapshots for trend analysis
+- [x] AI-powered trust analysis
+
+---
+
+### Documentarist Agent
+**Status:** Completed ✅
+**Implemented in:** FEAT-009 Phase 2
+
+- [x] Auto-discovery of data assets
+- [x] Schema scanning and column profiling
+- [x] AI-generated descriptions
+- [x] Sensitive data detection (PII, financial, etc.)
+- [x] Business term mapping
+- [x] Ownership issue creation
+
+---
+
+### Agent Orchestration
+**Status:** Completed ✅
+**Implemented in:** FEAT-016
+
+- [x] Orchestrator agent with Claude API integration
+- [x] Multi-agent tool coordination
+- [x] Context-aware chat interface
+- [x] Natural language to agent action translation
+- [x] Real-time data context injection
+
+---
+
+### FEAT-020: Data Structure Tab & Asset Editing
+**Status:** Completed
+**GitHub Issue:** [#7](https://github.com/martinzahumensky-bigz/amygdala/issues/7)
+**Original Prompt:** "Add Data Structure tab with column details, quality rules per column, business terms, PII classifications. Add inline editing for owner, steward, and classification."
+
+**Key Components:**
+- [x] Database migration for column_profiles (description, business_terms, classifications, highlights)
+- [x] Column update API endpoint (/api/assets/[assetId]/columns)
+- [x] Data Structure tab UI with expandable column rows
+- [x] Classification tag chips (PII=red, PHI=orange, PCI=purple, etc.)
+- [x] Inline editing for owner, steward, classification
+- [x] Documentarist enhancement for per-column metadata
+- [x] Badge component updated with "outline" variant
+
+---
+
+### FEAT-021: Data Products - Asset Grouping
+**Status:** Completed
+**GitHub Issue:** [#6](https://github.com/martinzahumensky-bigz/amygdala/issues/6)
+**Original Prompt:** "Implement new page in catalog which would allow to group assets to logical data products (e.g., Marketing, Finance)"
+
+**Research:** Based on Atlan/Collibra best practices and data mesh principles:
+- Data Products are first-class entities with ownership, lifecycle, and contracts
+- Many-to-many relationship between products and assets
+- Lifecycle: draft → published → deprecated → retired
+- Domain-based organization (Finance, Marketing, Operations, etc.)
+
+**Key Components:**
+- [x] Database migration for data_products and data_product_assets tables
+- [x] API routes for products CRUD (/api/products, /api/products/[id]/assets)
+- [x] Data Products listing page with grid/list views
+- [x] Create/Edit product modal with domain, owner, status fields
+- [x] Product detail page with Overview, Assets, Quality tabs
+- [x] Add/Remove assets drawer with search and multi-select
+- [x] Lifecycle status management (draft/published/deprecated/retired)
+- [x] Sidebar navigation update with Data Products link
+- [x] Seed data with sample products (Executive Analytics, Customer Intelligence, etc.)
+- [x] Specification document: `docs/FEAT-020-DATA-PRODUCTS-SPEC.md`
+
+---
+
+### FEAT-019: Transformation Agent
 **Status:** Planned
+**GitHub Issue:** [#5](https://github.com/martinzahumensky-bigz/amygdala/issues/5)
+**Original Prompt:** "Implement agent to transform and repair data based on quality rules and agent recommendations"
+
+**Purpose:** Execute data repairs and transformations suggested by other agents (Spotter, Quality, Debugger) with approval workflows and full lineage tracking.
+
+**Key Capabilities:**
+- [ ] Execute data repairs (standardize formats, fix patterns)
+- [ ] Apply transformations from quality rule failures
+- [ ] Generate and execute SQL/code for fixes
+- [ ] Preview changes before applying
+- [ ] Approval workflow integration with Operator
+- [ ] Full transformation lineage and audit trail
+- [ ] Rollback capability
+
+**Implementation Details:** See `docs/FEAT-019-TRANSFORMATION-AGENT-SPEC.md`
 
 ---
 
@@ -394,7 +489,22 @@ Mastering Agent:
 | FEAT-007 | Meridian Bank Data Generation | 2026-01-23 |
 | FEAT-008 | Meridian Bank Reports | 2026-01-23 |
 | FEAT-009 | Platform Enhancement (7 Phases) | 2026-01-27 |
-| FEAT-010 | Data Trust Index | 2026-01-27 |
+| FEAT-010 | Data Trust Index + Trust Agent | 2026-01-27 |
 | FEAT-011 | Home Dashboard Widgets | 2026-01-27 |
 | FEAT-016 | Orchestrator Agent Chat Interface | 2026-01-27 |
-| FEAT-017 | Enhanced Catalog Pages with Tabbed Interface | 2026-01-28 |
+| FEAT-017 | Enhanced Catalog + Quality Agent | 2026-01-28 |
+| FEAT-020 | Data Structure Tab & Asset Editing | 2026-01-29 |
+| FEAT-021 | Data Products - Asset Grouping | 2026-01-29 |
+
+### Agent Implementation Summary
+
+| Agent | Status | Primary Feature |
+|-------|--------|-----------------|
+| Spotter | ✅ Complete | FEAT-004 |
+| Documentarist | ✅ Complete | FEAT-009 |
+| Debugger | ✅ Complete | FEAT-009 |
+| Operator | ✅ Complete | FEAT-009 |
+| Quality | ✅ Complete | FEAT-017 |
+| Trust | ✅ Complete | FEAT-010 |
+| Orchestrator | ✅ Complete | FEAT-016 |
+| **Transformation** | ⏳ Planned | FEAT-019 |
