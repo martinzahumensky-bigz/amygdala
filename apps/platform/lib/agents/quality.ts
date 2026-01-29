@@ -264,12 +264,25 @@ Severity Guidelines:
       generatedRules.push(...rules);
     }
 
-    await this.log('rules_to_save', `Generated ${generatedRules.length} rules for ${asset.name}`);
+    await this.log('rules_to_save', `Generated ${generatedRules.length} rules for ${asset.name}`, {
+      ruleNames: generatedRules.map(r => r.name).slice(0, 5),
+      totalRules: generatedRules.length
+    });
 
     // Save generated rules
+    let savedCount = 0;
+    let errorCount = 0;
     for (const rule of generatedRules) {
-      await this.saveRule(rule);
+      try {
+        await this.saveRule(rule);
+        savedCount++;
+      } catch (err) {
+        errorCount++;
+        await this.log('save_loop_error', `Error in save loop for rule ${rule.name}`, { error: err });
+      }
     }
+
+    await this.log('rules_save_complete', `Save complete for ${asset.name}: ${savedCount} saved, ${errorCount} errors`);
 
     return generatedRules;
   }
@@ -563,35 +576,51 @@ Severity Guidelines:
   }
 
   private async saveRule(rule: QualityRule): Promise<void> {
-    // Check if rule already exists
-    const { data: existing } = await this.supabase
-      .from('quality_rules')
-      .select('id')
-      .eq('name', rule.name)
-      .single();
+    try {
+      // Check if rule already exists - use maybeSingle() to avoid error on 0 rows
+      const { data: existing, error: checkError } = await this.supabase
+        .from('quality_rules')
+        .select('id')
+        .eq('name', rule.name)
+        .maybeSingle();
 
-    if (existing) {
-      await this.log('rule_exists', `Rule already exists: ${rule.name}`);
-      return; // Don't duplicate
-    }
+      if (checkError) {
+        await this.log('rule_check_error', `Error checking existing rule ${rule.name}: ${checkError.message}`, { error: checkError });
+        return;
+      }
 
-    const { error } = await this.supabase.from('quality_rules').insert({
-      name: rule.name,
-      description: rule.description,
-      rule_type: rule.ruleType,
-      target_asset: rule.targetAsset,
-      target_column: rule.targetColumn,
-      expression: rule.expression,
-      threshold: rule.threshold,
-      severity: rule.severity,
-      enabled: rule.enabled,
-      metadata: rule.metadata,
-    });
+      if (existing) {
+        // Don't log every time to avoid log spam - rule already exists is normal
+        return; // Don't duplicate
+      }
 
-    if (error) {
-      await this.log('rule_save_error', `Failed to save rule ${rule.name}: ${error.message}`, { error });
-    } else {
-      await this.log('rule_saved', `Saved rule: ${rule.name}`);
+      const { error: insertError } = await this.supabase.from('quality_rules').insert({
+        name: rule.name,
+        description: rule.description,
+        rule_type: rule.ruleType,
+        target_asset: rule.targetAsset,
+        target_column: rule.targetColumn,
+        expression: rule.expression,
+        threshold: rule.threshold,
+        severity: rule.severity,
+        enabled: rule.enabled,
+        metadata: rule.metadata || {},
+      });
+
+      if (insertError) {
+        await this.log('rule_save_error', `Failed to save rule ${rule.name}: ${insertError.message}`, {
+          error: insertError,
+          rule: { name: rule.name, targetAsset: rule.targetAsset, ruleType: rule.ruleType }
+        });
+      } else {
+        await this.log('rule_saved', `Saved rule: ${rule.name}`, {
+          targetAsset: rule.targetAsset,
+          ruleType: rule.ruleType
+        });
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      await this.log('rule_save_exception', `Exception saving rule ${rule.name}: ${errorMsg}`, { error: err });
     }
   }
 
