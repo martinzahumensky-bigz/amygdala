@@ -21,6 +21,26 @@ CREATE TABLE IF NOT EXISTS amygdala.quality_rules (
     UNIQUE(name)
 );
 
+-- Add target_asset column if it doesn't exist (for existing tables)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'amygdala' AND table_name = 'quality_rules' AND column_name = 'target_asset') THEN
+        ALTER TABLE amygdala.quality_rules ADD COLUMN target_asset TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'amygdala' AND table_name = 'quality_rules' AND column_name = 'target_column') THEN
+        ALTER TABLE amygdala.quality_rules ADD COLUMN target_column TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'amygdala' AND table_name = 'quality_rules' AND column_name = 'expression') THEN
+        ALTER TABLE amygdala.quality_rules ADD COLUMN expression TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'amygdala' AND table_name = 'quality_rules' AND column_name = 'threshold') THEN
+        ALTER TABLE amygdala.quality_rules ADD COLUMN threshold NUMERIC DEFAULT 95;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'amygdala' AND table_name = 'quality_rules' AND column_name = 'enabled') THEN
+        ALTER TABLE amygdala.quality_rules ADD COLUMN enabled BOOLEAN DEFAULT true;
+    END IF;
+END $$;
+
 -- Create index for faster lookups
 CREATE INDEX IF NOT EXISTS idx_quality_rules_target_asset ON amygdala.quality_rules(target_asset);
 CREATE INDEX IF NOT EXISTS idx_quality_rules_enabled ON amygdala.quality_rules(enabled) WHERE enabled = true;

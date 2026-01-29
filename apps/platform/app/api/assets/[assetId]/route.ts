@@ -65,23 +65,53 @@ export async function GET(request: Request, { params }: RouteParams) {
       .eq('asset_id', assetId)
       .order('column_name');
 
-    // Get quality rules
+    // Get quality rules - query by target_asset (name) since that's how Quality agent saves them
     const { data: qualityRules } = await supabase
       .from('quality_rules')
       .select('*')
-      .eq('asset_id', assetId)
+      .eq('target_asset', asset.name)
       .order('rule_type');
 
     // Generate recommendations based on trust factors
     const recommendations = generateRecommendations(trustBreakdown.factors);
 
-    // Transform column profiles to include is_sensitive flag based on semantic type
-    const enrichedProfiles = (columnProfiles || []).map((profile: any) => ({
-      ...profile,
-      is_sensitive: ['email', 'phone', 'address', 'ssn', 'credit_card', 'password'].includes(
-        profile.inferred_semantic_type?.toLowerCase() || ''
-      ),
-    }));
+    // Transform column profiles to match UI expectations:
+    // - Map column_name to name
+    // - Add is_sensitive flag
+    // - Parse min/max values if stored as JSON strings
+    const enrichedProfiles = (columnProfiles || []).map((profile: any) => {
+      // Parse min_value and max_value if they're JSON strings
+      let minVal = profile.min_value;
+      let maxVal = profile.max_value;
+      try {
+        if (typeof minVal === 'string' && minVal !== 'null') {
+          minVal = JSON.parse(minVal);
+        }
+        if (typeof maxVal === 'string' && maxVal !== 'null') {
+          maxVal = JSON.parse(maxVal);
+        }
+      } catch {
+        // Keep original values if parsing fails
+      }
+
+      return {
+        // Map database column names to UI expected names
+        name: profile.column_name,
+        data_type: profile.data_type,
+        inferred_semantic_type: profile.inferred_semantic_type,
+        null_count: profile.null_count || 0,
+        null_percentage: profile.null_percentage || 0,
+        distinct_count: profile.distinct_count || 0,
+        distinct_percentage: profile.distinct_percentage || 0,
+        min_value: minVal,
+        max_value: maxVal,
+        mean_value: profile.mean_value,
+        top_values: profile.top_values || [],
+        is_sensitive: ['email', 'phone', 'address', 'ssn', 'credit_card', 'password'].includes(
+          profile.inferred_semantic_type?.toLowerCase() || ''
+        ),
+      };
+    });
 
     return NextResponse.json({
       asset,
