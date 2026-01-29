@@ -202,10 +202,10 @@ export default function AgentsPage() {
         icon={<Sparkles className="h-5 w-5" />}
         actions={
           <div className="flex items-center gap-2">
-            <Link href="/dashboard/agents/runs">
+            <Link href="/dashboard/jobs?type=agent">
               <Button variant="outline" size="sm" className="gap-2">
                 <History className="h-4 w-4" />
-                Run History
+                View Jobs
               </Button>
             </Link>
             <Button
@@ -277,7 +277,7 @@ export default function AgentsPage() {
               </div>
             </CardContent>
           </Card>
-          <Link href="/dashboard/agents/runs">
+          <Link href="/dashboard/jobs?type=agent">
             <Card className="cursor-pointer transition-all hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
@@ -394,7 +394,7 @@ export default function AgentsPage() {
                     <div className="flex gap-2">
                       {/* Run History Button - show for all agents with stats */}
                       {stats && stats.totalRuns > 0 && (
-                        <Link href={`/dashboard/agents/runs?agent=${agent.id}`}>
+                        <Link href={`/dashboard/jobs?type=agent&agent=${agent.id}`}>
                           <Button variant="ghost" size="sm" title="View run history">
                             <History className="h-4 w-4" />
                           </Button>
