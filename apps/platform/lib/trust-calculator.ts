@@ -17,6 +17,29 @@ export interface TrustScore {
   factorDetails: Record<string, { score: number; reasons: string[] }>;
   fitnessStatus: 'green' | 'amber' | 'red';
   explanation: string;
+  trustInsight?: TrustInsight;
+}
+
+// Static Trust: factors that rarely change (inherent data asset quality)
+// Live Trust: factors that change often (current operational state)
+export interface TrustInsight {
+  staticTrust: {
+    score: number; // 0-1
+    documented: boolean;
+    governed: boolean;
+    hasLineage: boolean;
+    classified: boolean;
+  };
+  liveTrust: {
+    status: 'green' | 'amber' | 'red';
+    isFresh: boolean;
+    hasIssues: boolean;
+    qualityValidated: boolean;
+    lastRefresh?: string;
+    issueCount: number;
+  };
+  aiSummary: string;
+  trustLevel: 'excellent' | 'good' | 'moderate' | 'needs_attention' | 'critical';
 }
 
 export interface Asset {
@@ -104,6 +127,9 @@ export function calculateTrustScore(
   // Generate explanation
   const explanation = generateExplanation(asset, factors, factorDetails, fitnessStatus);
 
+  // Generate trust insight (static vs live trust)
+  const trustInsight = generateTrustInsight(asset, factors, factorDetails, fitnessStatus, issues);
+
   return {
     rawScore,
     stars,
@@ -111,6 +137,7 @@ export function calculateTrustScore(
     factorDetails,
     fitnessStatus,
     explanation,
+    trustInsight,
   };
 }
 
@@ -396,6 +423,197 @@ function generateExplanation(
   }
 
   return parts.join(' ');
+}
+
+// Generate trust insight with static vs live trust separation
+function generateTrustInsight(
+  asset: Asset,
+  factors: TrustFactors,
+  factorDetails: Record<string, { score: number; reasons: string[] }>,
+  fitnessStatus: 'green' | 'amber' | 'red',
+  issues?: any[]
+): TrustInsight {
+  // Static trust factors (rarely change)
+  const documented = !!(asset.description && asset.description.length > 20);
+  const governed = !!(asset.owner && asset.steward);
+  const hasLineage =
+    (asset.upstream_assets && asset.upstream_assets.length > 0) ||
+    (asset.downstream_assets && asset.downstream_assets.length > 0);
+  const classified = !!(asset.tags && asset.tags.length > 0);
+
+  // Calculate static trust score (weighted)
+  const staticTrustScore =
+    (documented ? 0.3 : 0) +
+    (governed ? 0.35 : 0) +
+    (hasLineage ? 0.2 : 0) +
+    (classified ? 0.15 : 0);
+
+  // Live trust factors (change frequently)
+  const activeIssues =
+    issues?.filter(
+      (i) =>
+        i.affected_assets?.includes(asset.name) &&
+        i.status !== 'resolved' &&
+        i.status !== 'closed'
+    ) || [];
+  const hasIssues = activeIssues.length > 0;
+  const issueCount = activeIssues.length;
+
+  // Check freshness
+  const lastRefresh = asset.metadata?.lastRefresh;
+  let isFresh = false;
+  if (lastRefresh) {
+    const refreshDate = new Date(lastRefresh);
+    const now = new Date();
+    const hoursSinceRefresh = (now.getTime() - refreshDate.getTime()) / (1000 * 60 * 60);
+    isFresh = hoursSinceRefresh < 48; // Fresh if updated within 48 hours
+  } else {
+    isFresh = factors.freshness >= 0.5;
+  }
+
+  // Quality validated (has quality score or rules)
+  const qualityValidated = asset.quality_score !== undefined && asset.quality_score !== null;
+
+  // Determine live trust status
+  let liveTrustStatus: 'green' | 'amber' | 'red' = 'green';
+  const criticalIssues = activeIssues.filter((i) => i.severity === 'critical').length;
+  const highIssues = activeIssues.filter((i) => i.severity === 'high').length;
+
+  if (criticalIssues > 0 || !isFresh) {
+    liveTrustStatus = 'red';
+  } else if (highIssues > 0 || issueCount > 2) {
+    liveTrustStatus = 'amber';
+  }
+
+  // Determine overall trust level
+  const overallScore = (staticTrustScore + (liveTrustStatus === 'green' ? 1 : liveTrustStatus === 'amber' ? 0.5 : 0.2)) / 2;
+  let trustLevel: TrustInsight['trustLevel'];
+  if (overallScore >= 0.8) {
+    trustLevel = 'excellent';
+  } else if (overallScore >= 0.65) {
+    trustLevel = 'good';
+  } else if (overallScore >= 0.5) {
+    trustLevel = 'moderate';
+  } else if (overallScore >= 0.3) {
+    trustLevel = 'needs_attention';
+  } else {
+    trustLevel = 'critical';
+  }
+
+  // Generate AI summary (Trustpilot-style)
+  const aiSummary = generateAISummary(
+    asset,
+    factors,
+    documented,
+    governed,
+    hasLineage,
+    isFresh,
+    hasIssues,
+    issueCount,
+    qualityValidated,
+    trustLevel
+  );
+
+  return {
+    staticTrust: {
+      score: staticTrustScore,
+      documented,
+      governed,
+      hasLineage,
+      classified,
+    },
+    liveTrust: {
+      status: liveTrustStatus,
+      isFresh,
+      hasIssues,
+      qualityValidated,
+      lastRefresh: lastRefresh || undefined,
+      issueCount,
+    },
+    aiSummary,
+    trustLevel,
+  };
+}
+
+// Generate Trustpilot-style AI summary
+function generateAISummary(
+  asset: Asset,
+  factors: TrustFactors,
+  documented: boolean,
+  governed: boolean,
+  hasLineage: boolean,
+  isFresh: boolean,
+  hasIssues: boolean,
+  issueCount: number,
+  qualityValidated: boolean,
+  trustLevel: TrustInsight['trustLevel']
+): string {
+  const summaryParts: string[] = [];
+
+  // Opening based on trust level
+  switch (trustLevel) {
+    case 'excellent':
+      summaryParts.push('Highly trustworthy dataset with excellent governance.');
+      break;
+    case 'good':
+      summaryParts.push('Well-maintained dataset with good trust indicators.');
+      break;
+    case 'moderate':
+      summaryParts.push('Dataset has reasonable trust, but could be improved.');
+      break;
+    case 'needs_attention':
+      summaryParts.push('Dataset requires attention to improve trustworthiness.');
+      break;
+    case 'critical':
+      summaryParts.push('Dataset has critical trust issues that need resolution.');
+      break;
+  }
+
+  // Static trust commentary
+  const staticStrengths: string[] = [];
+  const staticWeaknesses: string[] = [];
+
+  if (documented) {
+    staticStrengths.push('well-documented');
+  } else {
+    staticWeaknesses.push('lacks documentation');
+  }
+
+  if (governed) {
+    staticStrengths.push('properly governed');
+  } else {
+    staticWeaknesses.push('needs ownership assignment');
+  }
+
+  if (hasLineage) {
+    staticStrengths.push('has clear lineage');
+  }
+
+  if (staticStrengths.length > 0) {
+    const strengthText = staticStrengths.slice(0, 2).join(' and ');
+    summaryParts.push(`Data is ${strengthText}.`);
+  }
+
+  // Live trust commentary
+  if (isFresh && !hasIssues && qualityValidated) {
+    summaryParts.push('Currently fresh with no active issues.');
+  } else {
+    const liveIssues: string[] = [];
+    if (!isFresh) {
+      liveIssues.push('data may be stale');
+    }
+    if (hasIssues) {
+      liveIssues.push(`${issueCount} active issue${issueCount > 1 ? 's' : ''}`);
+    }
+    if (!qualityValidated) {
+      liveIssues.push('quality not validated');
+    }
+    if (liveIssues.length > 0) {
+      summaryParts.push(`Note: ${liveIssues.join(', ')}.`);
+    }
+  }
+
+  return summaryParts.join(' ');
 }
 
 // Calculate aggregate trust index across all assets

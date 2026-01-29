@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAmygdalaClient, getMeridianClient } from '@/lib/supabase/client';
-import { calculateTrustIndex } from '@/lib/trust-calculator';
+import { calculateTrustScore, TrustInsight } from '@/lib/trust-calculator';
 
 interface RouteParams {
   params: Promise<{ assetId: string }>;
@@ -157,12 +157,17 @@ export async function GET(request: Request, { params }: RouteParams) {
       };
     });
 
+    // Calculate trust insight using the trust-calculator
+    const trustScoreResult = calculateTrustScore(asset, issues || []);
+
     return NextResponse.json({
       asset,
       trustBreakdown: {
         overall: trustBreakdown.overall,
         factors: trustBreakdown.factors,
         recommendations,
+        factorValues: trustScoreResult.factors,
+        trustInsight: trustScoreResult.trustInsight,
       },
       issues: issues || [],
       lineage,

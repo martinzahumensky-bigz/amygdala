@@ -21,8 +21,11 @@ import {
   ArrowDown,
   AlertTriangle,
   Info,
+  Hexagon,
+  BarChart3,
 } from 'lucide-react';
 import Link from 'next/link';
+import { TrustSpiderChart } from '@/components/trust';
 
 interface TrustFactors {
   documentation: number;
@@ -220,10 +223,46 @@ function FactorBar({
   );
 }
 
+function ViewModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: 'spider' | 'bar';
+  onChange: (mode: 'spider' | 'bar') => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
+      <button
+        onClick={() => onChange('spider')}
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+          mode === 'spider'
+            ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+        }`}
+      >
+        <Hexagon className="h-4 w-4" />
+        Spider
+      </button>
+      <button
+        onClick={() => onChange('bar')}
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+          mode === 'bar'
+            ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+        }`}
+      >
+        <BarChart3 className="h-4 w-4" />
+        Bar
+      </button>
+    </div>
+  );
+}
+
 export default function TrustIndexPage() {
   const [data, setData] = useState<TrustIndexData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRecalculating, setIsRecalculating] = useState(false);
+  const [factorViewMode, setFactorViewMode] = useState<'spider' | 'bar'>('spider');
 
   const fetchData = async () => {
     try {
@@ -433,21 +472,40 @@ export default function TrustIndexPage() {
           </Card>
         </div>
 
-        {/* Factor Breakdown */}
+        {/* Factor Breakdown with Visualization Toggle */}
         <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
-            Trust Factor Breakdown
-          </h3>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {(Object.keys(factorConfig) as (keyof TrustFactors)[]).map((factor) => (
-              <FactorBar
-                key={factor}
-                factor={factor}
-                score={aggregate.factorAverages[factor]}
-                trend={factorTrends[factor]}
-              />
-            ))}
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Trust Factor Breakdown
+            </h3>
+            <ViewModeToggle mode={factorViewMode} onChange={setFactorViewMode} />
           </div>
+
+          {factorViewMode === 'spider' ? (
+            <div className="flex flex-col items-center">
+              <TrustSpiderChart
+                factors={aggregate.factorAverages}
+                size={320}
+                showLabels={true}
+                showTooltips={true}
+                thresholdLine={0.7}
+              />
+              <p className="mt-4 text-sm text-gray-500 dark:text-gray-400 text-center">
+                Aggregate trust factors across all {data.assetCount} assets. Dashed line shows 70% threshold.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {(Object.keys(factorConfig) as (keyof TrustFactors)[]).map((factor) => (
+                <FactorBar
+                  key={factor}
+                  factor={factor}
+                  score={aggregate.factorAverages[factor]}
+                  trend={factorTrends[factor]}
+                />
+              ))}
+            </div>
+          )}
         </Card>
 
         {/* Asset Trust Scores */}

@@ -9,7 +9,6 @@ import { useChat, AgentCompleteEvent } from '@/contexts/ChatContext';
 import {
   Database,
   ArrowLeft,
-  Star,
   AlertTriangle,
   CheckCircle,
   MessageSquare,
@@ -31,22 +30,21 @@ import {
   ChevronDown,
   ChevronUp,
   Workflow,
-  Eye,
   Table2,
   Sparkles,
   Lock,
   Tag,
-  Building2,
   Hash,
   AlertCircle,
   TrendingUp,
-  TrendingDown,
   Percent,
   Box,
   Layers,
 } from 'lucide-react';
 import { DataStructureTab } from '@/components/catalog';
 import { InlineTextEdit, InlineSelectEdit } from '@/components/catalog';
+import { TrustAtGlance, TrustDetailModal, SimpleStarRating } from '@/components/trust';
+import { TrustFactors, TrustInsight } from '@/lib/trust-calculator';
 
 // ========== TYPES ==========
 interface Asset {
@@ -158,6 +156,8 @@ interface AssetDetail {
     overall: number;
     factors: TrustFactor[];
     recommendations: string[];
+    factorValues?: TrustFactors;
+    trustInsight?: TrustInsight;
   };
   issues: any[];
   lineage: {
@@ -236,22 +236,7 @@ function TabNavigation({
   );
 }
 
-function StarRating({ stars }: { stars: number }) {
-  return (
-    <div className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <Star
-          key={i}
-          className={`h-5 w-5 ${
-            i <= stars
-              ? 'text-yellow-400 fill-yellow-400'
-              : 'text-gray-300 dark:text-gray-600'
-          }`}
-        />
-      ))}
-    </div>
-  );
-}
+// StarRating moved to @/components/trust/StarRating.tsx
 
 function TrustFactorBreakdown({
   factors,
@@ -324,11 +309,18 @@ function OverviewTab({
   onAssetUpdate,
 }: {
   asset: Asset;
-  trustBreakdown: { overall: number; factors: TrustFactor[]; recommendations: string[] };
+  trustBreakdown: {
+    overall: number;
+    factors: TrustFactor[];
+    recommendations: string[];
+    factorValues?: TrustFactors;
+    trustInsight?: TrustInsight;
+  };
   issues: any[];
   openChat: (ctx: any) => void;
   onAssetUpdate?: (updates: Partial<Asset>) => Promise<void>;
 }) {
+  const [showTrustDetail, setShowTrustDetail] = useState(false);
   const metadata = asset.metadata || {};
 
   return (
@@ -569,38 +561,41 @@ function OverviewTab({
         </Card>
       )}
 
-      {/* Trust Index */}
-      <Card>
-        <CardContent className="p-5">
-          <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-purple-500" />
-            Trust Index
-          </h3>
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-base font-semibold text-gray-900 dark:text-white">
-                Overall Trust Score
-              </span>
-              <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                {trustBreakdown.overall.toFixed(0)}%
-              </span>
-            </div>
-            <div className="h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-300 ${
-                  trustBreakdown.overall >= 70
-                    ? 'bg-gradient-to-r from-green-500 to-green-400'
-                    : trustBreakdown.overall >= 40
-                    ? 'bg-gradient-to-r from-yellow-500 to-yellow-400'
-                    : 'bg-gradient-to-r from-red-500 to-red-400'
-                }`}
-                style={{ width: `${trustBreakdown.overall}%` }}
-              />
-            </div>
-          </div>
-          <TrustFactorBreakdown
+      {/* Trust Index - Enhanced Visualization */}
+      {trustBreakdown.trustInsight ? (
+        <>
+          <TrustAtGlance
+            score={trustBreakdown.overall}
+            stars={asset.trust_score_stars || Math.round(trustBreakdown.overall / 20)}
+            trustInsight={trustBreakdown.trustInsight}
+            onViewDetails={() => setShowTrustDetail(true)}
+            onChat={() =>
+              openChat({
+                type: 'asset',
+                id: asset.id,
+                title: asset.name,
+                prefilledPrompt: `Explain the trust score for "${asset.name}". Current score: ${trustBreakdown.overall.toFixed(0)}%. What can be improved?`,
+                autoSend: true,
+              })
+            }
+          />
+
+          {/* Trust Detail Modal */}
+          <TrustDetailModal
+            isOpen={showTrustDetail}
+            onClose={() => setShowTrustDetail(false)}
             factors={trustBreakdown.factors}
+            factorValues={trustBreakdown.factorValues || {
+              documentation: (trustBreakdown.factors.find(f => f.name === 'Documentation')?.score || 50) / 100,
+              governance: (trustBreakdown.factors.find(f => f.name === 'Governance')?.score || 50) / 100,
+              quality: (trustBreakdown.factors.find(f => f.name === 'Quality')?.score || 50) / 100,
+              usage: (trustBreakdown.factors.find(f => f.name === 'Usage')?.score || 50) / 100,
+              reliability: (trustBreakdown.factors.find(f => f.name === 'Reliability')?.score || 50) / 100,
+              freshness: (trustBreakdown.factors.find(f => f.name === 'Freshness')?.score || 50) / 100,
+            }}
+            overallScore={trustBreakdown.overall}
             onFixFactor={(factor) => {
+              setShowTrustDetail(false);
               openChat({
                 type: 'asset',
                 id: asset.id,
@@ -610,8 +605,52 @@ function OverviewTab({
               });
             }}
           />
-        </CardContent>
-      </Card>
+        </>
+      ) : (
+        /* Fallback to legacy Trust Index display if trustInsight not available */
+        <Card>
+          <CardContent className="p-5">
+            <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-purple-500" />
+              Trust Index
+            </h3>
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-base font-semibold text-gray-900 dark:text-white">
+                  Overall Trust Score
+                </span>
+                <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                  {trustBreakdown.overall.toFixed(0)}%
+                </span>
+              </div>
+              <div className="h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    trustBreakdown.overall >= 70
+                      ? 'bg-gradient-to-r from-green-500 to-green-400'
+                      : trustBreakdown.overall >= 40
+                      ? 'bg-gradient-to-r from-yellow-500 to-yellow-400'
+                      : 'bg-gradient-to-r from-red-500 to-red-400'
+                  }`}
+                  style={{ width: `${trustBreakdown.overall}%` }}
+                />
+              </div>
+            </div>
+            <TrustFactorBreakdown
+              factors={trustBreakdown.factors}
+              onFixFactor={(factor) => {
+                openChat({
+                  type: 'asset',
+                  id: asset.id,
+                  title: asset.name,
+                  prefilledPrompt: `Help me improve the ${factor.name} score for "${asset.name}". Current score: ${factor.score.toFixed(0)}%. ${factor.recommendation || ''}`,
+                  autoSend: true,
+                });
+              }}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Open Issues */}
       {issues.length > 0 && (
@@ -2010,7 +2049,7 @@ export default function AssetDetailPage({
           </div>
 
           <div className="flex flex-col items-end gap-2">
-            <StarRating stars={asset.trust_score_stars || 0} />
+            <SimpleStarRating stars={asset.trust_score_stars || 0} />
             <span className="text-sm text-gray-500">
               Trust Score: {trustBreakdown.overall.toFixed(0)}%
             </span>

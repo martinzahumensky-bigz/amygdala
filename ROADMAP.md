@@ -476,6 +476,29 @@ Mastering Agent:
 
 ---
 
+### FEAT-022: Enhanced Data Trust Index Visualization
+**Status:** Completed
+**GitHub Issue:** [#8](https://github.com/martinzahumensky-bigz/amygdala/issues/8)
+**Original Prompt:** "Implement enhanced trust index visualization with at-a-glance view, spider chart, and improved detail panel"
+
+**Purpose:** Redesign the Data Trust Index visualization with three tiers of insight: at-a-glance view (Trustpilot-style), spider/radar chart, and detailed bar chart.
+
+**Key Concept: Static Trust vs Live Trust**
+- **Static Trust:** Documentation, Governance, Lineage, Classification (rarely changes)
+- **Live Trust:** Freshness, Active Issues, Quality validation (dynamic operational state)
+
+**Key Components:**
+- [x] TrustAtGlance component with circular gauge, 5-star rating, AI summary
+- [x] TrustSpiderChart component with 6-axis radar visualization
+- [x] TrustDetailPanel component with spider/bar chart toggle
+- [x] StarRating reusable component
+- [x] Enhanced trust calculator with TrustInsight interface
+- [x] Static/Live trust separation with AI-generated summaries
+- [x] Asset detail page integration
+- [x] Trust index page spider chart toggle
+
+---
+
 ## Completed Features
 
 | ID | Title | Date |
@@ -495,6 +518,7 @@ Mastering Agent:
 | FEAT-017 | Enhanced Catalog + Quality Agent | 2026-01-28 |
 | FEAT-020 | Data Structure Tab & Asset Editing | 2026-01-29 |
 | FEAT-021 | Data Products - Asset Grouping | 2026-01-29 |
+| FEAT-022 | Enhanced Trust Index Visualization | 2026-01-30 |
 
 ### Agent Implementation Summary
 
