@@ -139,16 +139,30 @@ Severity Guidelines:
 
       // Phase 2: Validate existing rules
       if (mode === 'validate' || mode === 'both') {
+        await this.log('validation_start', 'Starting rule validation phase');
+
         for (const asset of assets) {
           try {
             const rules = await this.getExistingRules(asset.name);
 
+            await this.log('asset_rules', `Found ${rules.length} rules for ${asset.name}`);
+
             for (const rule of rules) {
-              if (!rule.enabled) continue;
+              if (!rule.enabled) {
+                await this.log('rule_disabled', `Skipping disabled rule: ${rule.name}`);
+                continue;
+              }
 
               stats.rules_validated++;
 
               const result = await this.validateRule(rule);
+
+              await this.log('rule_validated', `Rule ${rule.name}: ${result.passRate.toFixed(1)}% pass rate (threshold: ${rule.threshold}%)`, {
+                passed: result.passed,
+                passRate: result.passRate,
+                threshold: rule.threshold,
+                totalRecords: result.totalRecords,
+              });
 
               if (result.passed) {
                 stats.rules_passed++;
@@ -160,14 +174,18 @@ Severity Guidelines:
                 if (issue) {
                   stats.issues_created++;
                   issuesCreated++;
+                  await this.log('issue_created', `Created issue for failed rule: ${rule.name}`);
                 }
               }
             }
           } catch (error) {
             const msg = `Failed to validate rules for ${asset.name}: ${error}`;
             errors.push(msg);
+            await this.log('validation_error', msg);
           }
         }
+
+        await this.log('validation_complete', `Validation complete: ${stats.rules_validated} validated, ${stats.rules_passed} passed, ${stats.rules_failed} failed`);
       }
 
       await this.log('run_completed', 'Quality agent run completed', { stats });
@@ -220,19 +238,33 @@ Severity Guidelines:
   private async generateRulesForAsset(asset: any): Promise<QualityRule[]> {
     const generatedRules: QualityRule[] = [];
 
+    await this.log('generating_rules', `Generating rules for asset: ${asset.name}`);
+
     // Get table name from asset
     const tableName = this.getTableName(asset);
-    if (!tableName) return generatedRules;
+    if (!tableName) {
+      await this.log('no_table_name', `Could not determine table name for asset: ${asset.name}`);
+      return generatedRules;
+    }
+
+    await this.log('table_name', `Table name for ${asset.name}: ${tableName}`);
 
     // Profile the table
     const profile = await this.profileTable(tableName);
-    if (!profile) return generatedRules;
+    if (!profile) {
+      await this.log('no_profile', `Could not profile table for asset: ${asset.name}`);
+      return generatedRules;
+    }
+
+    await this.log('profile_complete', `Profiled ${profile.columns.length} columns for ${asset.name}`);
 
     // Generate rules based on profiling
     for (const column of profile.columns) {
       const rules = await this.generateColumnRules(asset, column, profile);
       generatedRules.push(...rules);
     }
+
+    await this.log('rules_to_save', `Generated ${generatedRules.length} rules for ${asset.name}`);
 
     // Save generated rules
     for (const rule of generatedRules) {
@@ -268,15 +300,25 @@ Severity Guidelines:
     try {
       const [schema, table] = tableName.split('.');
 
+      await this.log('profiling_table', `Profiling table: ${tableName}`);
+
       // Get column info
       const { data: columns, error } = await this.meridian
         .from(table)
         .select('*')
         .limit(1000);
 
-      if (error || !columns || columns.length === 0) {
+      if (error) {
+        await this.log('profile_error', `Error profiling ${tableName}: ${error.message}`);
         return null;
       }
+
+      if (!columns || columns.length === 0) {
+        await this.log('profile_empty', `Table ${tableName} is empty, skipping profiling`);
+        return null;
+      }
+
+      await this.log('profile_data', `Found ${columns.length} rows in ${tableName}`);
 
       // Analyze columns
       const columnProfiles = [];
@@ -528,9 +570,12 @@ Severity Guidelines:
       .eq('name', rule.name)
       .single();
 
-    if (existing) return; // Don't duplicate
+    if (existing) {
+      await this.log('rule_exists', `Rule already exists: ${rule.name}`);
+      return; // Don't duplicate
+    }
 
-    await this.supabase.from('quality_rules').insert({
+    const { error } = await this.supabase.from('quality_rules').insert({
       name: rule.name,
       description: rule.description,
       rule_type: rule.ruleType,
@@ -542,6 +587,12 @@ Severity Guidelines:
       enabled: rule.enabled,
       metadata: rule.metadata,
     });
+
+    if (error) {
+      await this.log('rule_save_error', `Failed to save rule ${rule.name}: ${error.message}`, { error });
+    } else {
+      await this.log('rule_saved', `Saved rule: ${rule.name}`);
+    }
   }
 
   private async validateRule(rule: QualityRule): Promise<QualityValidationResult> {
