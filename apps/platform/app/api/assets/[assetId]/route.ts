@@ -66,11 +66,27 @@ export async function GET(request: Request, { params }: RouteParams) {
       .order('column_name');
 
     // Get quality rules - query by target_asset (name) since that's how Quality agent saves them
-    const { data: qualityRules } = await supabase
+    const { data: qualityRulesRaw } = await supabase
       .from('quality_rules')
       .select('*')
       .eq('target_asset', asset.name)
       .order('rule_type');
+
+    // Transform quality rules to match UI expectations
+    const qualityRules = (qualityRulesRaw || []).map((rule: any) => ({
+      id: rule.id,
+      name: rule.name,
+      rule_type: rule.rule_type,
+      expression: rule.expression,
+      severity: rule.severity,
+      threshold: rule.threshold,
+      pass_rate: rule.last_pass_rate ?? 0, // Map last_pass_rate to pass_rate for UI
+      last_executed: rule.last_validated_at,
+      is_active: rule.enabled,
+      total_records: rule.last_total_records,
+      passed_records: rule.last_passed_records,
+      failed_records: rule.last_failed_records,
+    }));
 
     // Generate recommendations based on trust factors
     const recommendations = generateRecommendations(trustBreakdown.factors);

@@ -157,6 +157,9 @@ Severity Guidelines:
 
               const result = await this.validateRule(rule);
 
+              // Save validation results back to the rule
+              await this.updateRuleValidationResult(rule, result);
+
               await this.log('rule_validated', `Rule ${rule.name}: ${result.passRate.toFixed(1)}% pass rate (threshold: ${rule.threshold}%)`, {
                 passed: result.passed,
                 passRate: result.passRate,
@@ -730,6 +733,30 @@ Severity Guidelines:
 
       default:
         return true;
+    }
+  }
+
+  private async updateRuleValidationResult(rule: QualityRule, result: QualityValidationResult): Promise<void> {
+    if (!rule.id) return;
+
+    try {
+      const { error } = await this.supabase
+        .from('quality_rules')
+        .update({
+          last_pass_rate: result.passRate,
+          last_validated_at: new Date().toISOString(),
+          last_total_records: result.totalRecords,
+          last_passed_records: result.passedRecords,
+          last_failed_records: result.failedRecords,
+        })
+        .eq('id', rule.id);
+
+      if (error) {
+        await this.log('rule_update_error', `Failed to update validation results for ${rule.name}: ${error.message}`);
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      await this.log('rule_update_exception', `Exception updating rule ${rule.name}: ${errorMsg}`);
     }
   }
 
