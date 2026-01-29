@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/Header';
 import { Card, Badge, Button, Avatar, Dropdown } from '@amygdala/ui';
 import {
@@ -22,6 +22,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useChat, AgentCompleteEvent } from '@/contexts/ChatContext';
 
 interface Issue {
   id: string;
@@ -199,13 +200,14 @@ function IssueCard({ issue, onStatusChange }: { issue: Issue; onStatusChange: (i
 }
 
 export default function IssuesPage() {
+  const { subscribeToAgentComplete } = useChat();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [counts, setCounts] = useState<IssueCounts | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
 
-  const fetchIssues = async () => {
+  const fetchIssues = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (statusFilter !== 'all') {
@@ -221,11 +223,26 @@ export default function IssuesPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [statusFilter]);
 
   useEffect(() => {
     fetchIssues();
-  }, [statusFilter]);
+  }, [fetchIssues]);
+
+  // Subscribe to agent completion events to refresh issues after Spotter or other agents run
+  useEffect(() => {
+    const unsubscribe = subscribeToAgentComplete((event: AgentCompleteEvent) => {
+      // Refresh issues when Spotter or other agents that might create/update issues complete
+      const isRelevantAgent = event.agentUsed === 'orchestrator' || event.agentUsed === 'spotter' || event.agentUsed === 'debugger';
+      const isRelevantAction = event.action?.type === 'run_agent' || event.toolResults;
+
+      if (isRelevantAgent && isRelevantAction) {
+        setTimeout(() => fetchIssues(), 500);
+      }
+    });
+
+    return unsubscribe;
+  }, [subscribeToAgentComplete, fetchIssues]);
 
   const handleStatusChange = async (issueId: string, newStatus: string) => {
     try {

@@ -46,6 +46,7 @@ export async function POST(request: Request) {
       message: response.message,
       agentUsed: response.agentUsed,
       action: response.action,
+      toolResults: response.toolResults,
       suggestions: response.suggestions,
       sessionId: context.sessionId,
       timestamp: new Date().toISOString(),

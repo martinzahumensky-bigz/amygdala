@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { Card, CardContent, Badge, Button } from '@amygdala/ui';
 import Link from 'next/link';
-import { useChat } from '@/contexts/ChatContext';
+import { useChat, AgentCompleteEvent } from '@/contexts/ChatContext';
 import {
   Database,
   ArrowLeft,
@@ -1788,13 +1788,13 @@ export default function AssetDetailPage({
 }) {
   const { assetId } = use(params);
   const router = useRouter();
-  const { openChat } = useChat();
+  const { openChat, subscribeToAgentComplete } = useChat();
   const [data, setData] = useState<AssetDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
 
-  const fetchAsset = async () => {
+  const fetchAsset = useCallback(async () => {
     try {
       setIsLoading(true);
       const res = await fetch(`/api/assets/${assetId}`);
@@ -1808,7 +1808,7 @@ export default function AssetDetailPage({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [assetId]);
 
   const handleAssetUpdate = async (updates: Partial<Asset>) => {
     try {
@@ -1859,7 +1859,26 @@ export default function AssetDetailPage({
 
   useEffect(() => {
     fetchAsset();
-  }, [assetId]);
+  }, [assetId, fetchAsset]);
+
+  // Subscribe to agent completion events to refresh data after agent runs
+  useEffect(() => {
+    const unsubscribe = subscribeToAgentComplete((event: AgentCompleteEvent) => {
+      // Refresh data if the agent action was related to this asset
+      const isRelevantAgent = event.agentUsed === 'orchestrator' || event.agentUsed === 'documentarist';
+      const isRelevantAction = event.action?.type === 'run_agent' || event.toolResults;
+      const isThisAsset = event.entityContext?.type === 'asset' && event.entityContext?.id === assetId;
+
+      if (isRelevantAgent && isRelevantAction && isThisAsset) {
+        // Delay slightly to ensure database writes are complete
+        setTimeout(() => {
+          fetchAsset();
+        }, 500);
+      }
+    });
+
+    return unsubscribe;
+  }, [assetId, subscribeToAgentComplete, fetchAsset]);
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', {

@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
 
 export interface ChatOpenOptions {
   type: 'issue' | 'asset' | 'recommendation' | 'general';
@@ -10,12 +10,29 @@ export interface ChatOpenOptions {
   autoSend?: boolean; // Automatically send the prefilled prompt
 }
 
+export interface AgentCompleteEvent {
+  agentUsed?: string;
+  action?: {
+    type: string;
+    details?: Record<string, any>;
+  };
+  toolResults?: Record<string, any>;
+  entityContext?: {
+    type: string;
+    id?: string;
+  };
+}
+
+type AgentCompleteCallback = (event: AgentCompleteEvent) => void;
+
 interface ChatContextValue {
   isOpen: boolean;
   context: ChatOpenOptions | null;
   openChat: (options?: ChatOpenOptions) => void;
   closeChat: () => void;
   setContext: (context: ChatOpenOptions | null) => void;
+  notifyAgentComplete: (event: AgentCompleteEvent) => void;
+  subscribeToAgentComplete: (callback: AgentCompleteCallback) => () => void;
 }
 
 const ChatContext = createContext<ChatContextValue | undefined>(undefined);
@@ -23,6 +40,7 @@ const ChatContext = createContext<ChatContextValue | undefined>(undefined);
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [context, setContext] = useState<ChatOpenOptions | null>(null);
+  const agentCompleteCallbacks = useRef<Set<AgentCompleteCallback>>(new Set());
 
   const openChat = useCallback((options?: ChatOpenOptions) => {
     if (options) {
@@ -37,6 +55,23 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setContext(null), 300);
   }, []);
 
+  const notifyAgentComplete = useCallback((event: AgentCompleteEvent) => {
+    agentCompleteCallbacks.current.forEach((callback) => {
+      try {
+        callback(event);
+      } catch (error) {
+        console.error('Error in agent complete callback:', error);
+      }
+    });
+  }, []);
+
+  const subscribeToAgentComplete = useCallback((callback: AgentCompleteCallback) => {
+    agentCompleteCallbacks.current.add(callback);
+    return () => {
+      agentCompleteCallbacks.current.delete(callback);
+    };
+  }, []);
+
   return (
     <ChatContext.Provider
       value={{
@@ -45,6 +80,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         openChat,
         closeChat,
         setContext,
+        notifyAgentComplete,
+        subscribeToAgentComplete,
       }}
     >
       {children}

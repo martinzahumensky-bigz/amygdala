@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { Card, CardContent, Badge, Button, Dropdown } from '@amygdala/ui';
-import { useChat } from '@/contexts/ChatContext';
+import { useChat, AgentCompleteEvent } from '@/contexts/ChatContext';
 import Link from 'next/link';
 import {
   AlertTriangle,
@@ -140,13 +140,13 @@ export default function IssueDetailPage({
 }) {
   const { issueId } = use(params);
   const router = useRouter();
-  const { openChat } = useChat();
+  const { openChat, subscribeToAgentComplete } = useChat();
   const [data, setData] = useState<IssueDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  const fetchIssue = async () => {
+  const fetchIssue = useCallback(async () => {
     try {
       setIsLoading(true);
       const res = await fetch(`/api/issues/${issueId}`);
@@ -160,11 +160,27 @@ export default function IssueDetailPage({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [issueId]);
 
   useEffect(() => {
     fetchIssue();
-  }, [issueId]);
+  }, [issueId, fetchIssue]);
+
+  // Subscribe to agent completion events to refresh data after agents run
+  useEffect(() => {
+    const unsubscribe = subscribeToAgentComplete((event: AgentCompleteEvent) => {
+      // Refresh if any agent action completed related to this issue
+      const isRelevantAgent = event.agentUsed === 'orchestrator' || event.agentUsed === 'debugger' || event.agentUsed === 'spotter';
+      const isRelevantAction = event.action?.type === 'run_agent' || event.toolResults;
+      const isThisIssue = event.entityContext?.type === 'issue' && event.entityContext?.id === issueId;
+
+      if (isRelevantAgent && isRelevantAction && isThisIssue) {
+        setTimeout(() => fetchIssue(), 500);
+      }
+    });
+
+    return unsubscribe;
+  }, [issueId, subscribeToAgentComplete, fetchIssue]);
 
   const updateStatus = async (newStatus: string) => {
     if (!data) return;

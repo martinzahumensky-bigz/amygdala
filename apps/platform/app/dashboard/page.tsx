@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/Header';
 import { Card, CardContent, CardHeader, CardTitle, Badge, QualityBar, Button, Avatar } from '@amygdala/ui';
 import {
@@ -21,6 +21,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useChat, AgentCompleteEvent } from '@/contexts/ChatContext';
 
 interface DashboardData {
   stats: {
@@ -69,11 +70,12 @@ const agentIcons: Record<string, any> = {
 };
 
 export default function DashboardPage() {
+  const { subscribeToAgentComplete } = useChat();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRunningAgent, setIsRunningAgent] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const res = await fetch('/api/dashboard');
       const result = await res.json();
@@ -83,14 +85,26 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
     // Poll for updates every 30 seconds
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchData]);
+
+  // Subscribe to agent completion events to refresh data immediately after agents run
+  useEffect(() => {
+    const unsubscribe = subscribeToAgentComplete((event: AgentCompleteEvent) => {
+      // Refresh dashboard whenever any agent completes an action
+      if (event.action?.type === 'run_agent' || event.toolResults) {
+        setTimeout(() => fetchData(), 500);
+      }
+    });
+
+    return unsubscribe;
+  }, [subscribeToAgentComplete, fetchData]);
 
   const runAgent = async (agentName: string) => {
     setIsRunningAgent(agentName);

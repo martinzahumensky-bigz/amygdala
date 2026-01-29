@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/Header';
 import { Card, CardContent, Badge, Button } from '@amygdala/ui';
 import {
@@ -21,6 +21,7 @@ import {
   Settings2,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useChat, AgentCompleteEvent } from '@/contexts/ChatContext';
 
 interface AgentConfig {
   id: string;
@@ -107,13 +108,14 @@ interface AgentLog {
 }
 
 export default function AgentsPage() {
+  const { subscribeToAgentComplete } = useChat();
   const [agentStats, setAgentStats] = useState<Record<string, AgentStats>>({});
   const [recentLogs, setRecentLogs] = useState<AgentLog[]>([]);
   const [runningAgents, setRunningAgents] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [lastRunResult, setLastRunResult] = useState<any>(null);
 
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch('/api/agents/status');
       const data = await res.json();
@@ -131,14 +133,26 @@ export default function AgentsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchStatus();
     // Poll for updates every 5 seconds
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchStatus]);
+
+  // Subscribe to agent completion events for immediate updates
+  useEffect(() => {
+    const unsubscribe = subscribeToAgentComplete((event: AgentCompleteEvent) => {
+      // Refresh status immediately when any agent completes
+      if (event.action?.type === 'run_agent' || event.toolResults) {
+        fetchStatus();
+      }
+    });
+
+    return unsubscribe;
+  }, [subscribeToAgentComplete, fetchStatus]);
 
   const runAgent = async (agentId: string) => {
     setRunningAgents((prev) => new Set([...prev, agentId]));

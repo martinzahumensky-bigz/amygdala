@@ -23,7 +23,7 @@ interface ChatMessage {
 }
 
 export function ChatDrawer() {
-  const { isOpen, context, closeChat } = useChat();
+  const { isOpen, context, closeChat, notifyAgentComplete } = useChat();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -130,6 +130,16 @@ export function ChatDrawer() {
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Notify subscribers when an agent action completes
+      if (data.toolResults || (data.action && data.action.type !== 'none')) {
+        notifyAgentComplete({
+          agentUsed: data.agentUsed,
+          action: data.action,
+          toolResults: data.toolResults,
+          entityContext: context ? { type: context.type, id: context.id } : undefined,
+        });
+      }
     } catch (error) {
       console.error('Chat error:', error);
       const errorMessage: ChatMessage = {
