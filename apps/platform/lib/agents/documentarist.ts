@@ -294,20 +294,233 @@ Always respond with a JSON object containing:
       .select('*')
       .limit(1);
 
-    if (!data || data.length === 0) {
-      return [];
+    if (data && data.length > 0) {
+      const row = data[0];
+      return Object.entries(row).map(([key, value], index) => ({
+        column_name: key,
+        data_type: this.inferDataType(value),
+        is_nullable: value === null ? 'YES' : 'NO',
+        column_default: null,
+        ordinal_position: index + 1,
+      }));
     }
 
-    const row = data[0];
-    const columns: ColumnInfo[] = Object.entries(row).map(([key, value], index) => ({
-      column_name: key,
-      data_type: this.inferDataType(value),
-      is_nullable: value === null ? 'YES' : 'NO',
-      column_default: null,
-      ordinal_position: index + 1,
-    }));
+    // Fallback to hardcoded column definitions for known tables
+    const knownColumns = this.getKnownTableColumns(tableName);
+    if (knownColumns.length > 0) {
+      await this.log('columns_from_schema', `Table ${tableName} is empty, using schema definition with ${knownColumns.length} columns`);
+      return knownColumns;
+    }
 
-    return columns;
+    return [];
+  }
+
+  /**
+   * Returns known column definitions for Meridian tables.
+   * Used as a fallback when table is empty and we can't infer from data.
+   */
+  private getKnownTableColumns(tableName: string): ColumnInfo[] {
+    const schemas: Record<string, ColumnInfo[]> = {
+      // Reference tables
+      ref_branches: [
+        { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 1 },
+        { column_name: 'branch_code', data_type: 'text', is_nullable: 'NO', column_default: null, ordinal_position: 2 },
+        { column_name: 'name', data_type: 'text', is_nullable: 'NO', column_default: null, ordinal_position: 3 },
+        { column_name: 'region', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 4 },
+        { column_name: 'city', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 5 },
+        { column_name: 'address', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 6 },
+        { column_name: 'manager', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 7 },
+        { column_name: 'created_at', data_type: 'timestamp', is_nullable: 'NO', column_default: null, ordinal_position: 8 },
+      ],
+      ref_products: [
+        { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 1 },
+        { column_name: 'product_code', data_type: 'text', is_nullable: 'NO', column_default: null, ordinal_position: 2 },
+        { column_name: 'name', data_type: 'text', is_nullable: 'NO', column_default: null, ordinal_position: 3 },
+        { column_name: 'category', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 4 },
+        { column_name: 'interest_rate', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 5 },
+        { column_name: 'min_amount', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 6 },
+        { column_name: 'max_amount', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 7 },
+        { column_name: 'created_at', data_type: 'timestamp', is_nullable: 'NO', column_default: null, ordinal_position: 8 },
+      ],
+      ref_customer_segments: [
+        { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 1 },
+        { column_name: 'segment_code', data_type: 'text', is_nullable: 'NO', column_default: null, ordinal_position: 2 },
+        { column_name: 'name', data_type: 'text', is_nullable: 'NO', column_default: null, ordinal_position: 3 },
+        { column_name: 'description', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 4 },
+        { column_name: 'created_at', data_type: 'timestamp', is_nullable: 'NO', column_default: null, ordinal_position: 5 },
+      ],
+      // Bronze tables
+      bronze_customers: [
+        { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 1 },
+        { column_name: 'customer_id', data_type: 'text', is_nullable: 'NO', column_default: null, ordinal_position: 2 },
+        { column_name: 'first_name', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 3 },
+        { column_name: 'last_name', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 4 },
+        { column_name: 'email', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 5 },
+        { column_name: 'phone', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 6 },
+        { column_name: 'date_of_birth', data_type: 'date', is_nullable: 'YES', column_default: null, ordinal_position: 7 },
+        { column_name: 'address', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 8 },
+        { column_name: 'city', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 9 },
+        { column_name: 'state', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 10 },
+        { column_name: 'zip_code', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 11 },
+        { column_name: 'segment_id', data_type: 'uuid', is_nullable: 'YES', column_default: null, ordinal_position: 12 },
+        { column_name: 'created_at', data_type: 'timestamp', is_nullable: 'NO', column_default: null, ordinal_position: 13 },
+        { column_name: 'updated_at', data_type: 'timestamp', is_nullable: 'YES', column_default: null, ordinal_position: 14 },
+      ],
+      bronze_transactions: [
+        { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 1 },
+        { column_name: 'transaction_id', data_type: 'text', is_nullable: 'NO', column_default: null, ordinal_position: 2 },
+        { column_name: 'account_id', data_type: 'uuid', is_nullable: 'YES', column_default: null, ordinal_position: 3 },
+        { column_name: 'transaction_type', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 4 },
+        { column_name: 'amount', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 5 },
+        { column_name: 'currency', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 6 },
+        { column_name: 'transaction_date', data_type: 'timestamp', is_nullable: 'YES', column_default: null, ordinal_position: 7 },
+        { column_name: 'branch_id', data_type: 'uuid', is_nullable: 'YES', column_default: null, ordinal_position: 8 },
+        { column_name: 'description', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 9 },
+        { column_name: 'created_at', data_type: 'timestamp', is_nullable: 'NO', column_default: null, ordinal_position: 10 },
+      ],
+      bronze_loans: [
+        { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 1 },
+        { column_name: 'loan_id', data_type: 'text', is_nullable: 'NO', column_default: null, ordinal_position: 2 },
+        { column_name: 'customer_id', data_type: 'uuid', is_nullable: 'YES', column_default: null, ordinal_position: 3 },
+        { column_name: 'product_id', data_type: 'uuid', is_nullable: 'YES', column_default: null, ordinal_position: 4 },
+        { column_name: 'amount', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 5 },
+        { column_name: 'interest_rate', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 6 },
+        { column_name: 'term_months', data_type: 'integer', is_nullable: 'YES', column_default: null, ordinal_position: 7 },
+        { column_name: 'status', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 8 },
+        { column_name: 'collateral_value', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 9 },
+        { column_name: 'origination_date', data_type: 'date', is_nullable: 'YES', column_default: null, ordinal_position: 10 },
+        { column_name: 'created_at', data_type: 'timestamp', is_nullable: 'NO', column_default: null, ordinal_position: 11 },
+      ],
+      bronze_accounts: [
+        { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 1 },
+        { column_name: 'account_id', data_type: 'text', is_nullable: 'NO', column_default: null, ordinal_position: 2 },
+        { column_name: 'customer_id', data_type: 'uuid', is_nullable: 'YES', column_default: null, ordinal_position: 3 },
+        { column_name: 'account_type', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 4 },
+        { column_name: 'balance', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 5 },
+        { column_name: 'currency', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 6 },
+        { column_name: 'branch_id', data_type: 'uuid', is_nullable: 'YES', column_default: null, ordinal_position: 7 },
+        { column_name: 'status', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 8 },
+        { column_name: 'opened_date', data_type: 'date', is_nullable: 'YES', column_default: null, ordinal_position: 9 },
+        { column_name: 'created_at', data_type: 'timestamp', is_nullable: 'NO', column_default: null, ordinal_position: 10 },
+      ],
+      // Silver tables
+      silver_customers: [
+        { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 1 },
+        { column_name: 'customer_id', data_type: 'text', is_nullable: 'NO', column_default: null, ordinal_position: 2 },
+        { column_name: 'first_name', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 3 },
+        { column_name: 'last_name', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 4 },
+        { column_name: 'full_name', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 5 },
+        { column_name: 'email', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 6 },
+        { column_name: 'email_valid', data_type: 'boolean', is_nullable: 'YES', column_default: null, ordinal_position: 7 },
+        { column_name: 'phone', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 8 },
+        { column_name: 'phone_normalized', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 9 },
+        { column_name: 'date_of_birth', data_type: 'date', is_nullable: 'YES', column_default: null, ordinal_position: 10 },
+        { column_name: 'age', data_type: 'integer', is_nullable: 'YES', column_default: null, ordinal_position: 11 },
+        { column_name: 'segment_id', data_type: 'uuid', is_nullable: 'YES', column_default: null, ordinal_position: 12 },
+        { column_name: 'segment_name', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 13 },
+        { column_name: 'created_at', data_type: 'timestamp', is_nullable: 'NO', column_default: null, ordinal_position: 14 },
+        { column_name: 'updated_at', data_type: 'timestamp', is_nullable: 'YES', column_default: null, ordinal_position: 15 },
+      ],
+      silver_transactions: [
+        { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 1 },
+        { column_name: 'transaction_id', data_type: 'text', is_nullable: 'NO', column_default: null, ordinal_position: 2 },
+        { column_name: 'account_id', data_type: 'uuid', is_nullable: 'YES', column_default: null, ordinal_position: 3 },
+        { column_name: 'customer_id', data_type: 'uuid', is_nullable: 'YES', column_default: null, ordinal_position: 4 },
+        { column_name: 'transaction_type', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 5 },
+        { column_name: 'amount', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 6 },
+        { column_name: 'amount_usd', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 7 },
+        { column_name: 'currency', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 8 },
+        { column_name: 'transaction_date', data_type: 'timestamp', is_nullable: 'YES', column_default: null, ordinal_position: 9 },
+        { column_name: 'branch_id', data_type: 'uuid', is_nullable: 'YES', column_default: null, ordinal_position: 10 },
+        { column_name: 'branch_name', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 11 },
+        { column_name: 'is_valid', data_type: 'boolean', is_nullable: 'YES', column_default: null, ordinal_position: 12 },
+        { column_name: 'created_at', data_type: 'timestamp', is_nullable: 'NO', column_default: null, ordinal_position: 13 },
+      ],
+      silver_loans: [
+        { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 1 },
+        { column_name: 'loan_id', data_type: 'text', is_nullable: 'NO', column_default: null, ordinal_position: 2 },
+        { column_name: 'customer_id', data_type: 'uuid', is_nullable: 'YES', column_default: null, ordinal_position: 3 },
+        { column_name: 'customer_name', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 4 },
+        { column_name: 'product_id', data_type: 'uuid', is_nullable: 'YES', column_default: null, ordinal_position: 5 },
+        { column_name: 'product_name', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 6 },
+        { column_name: 'amount', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 7 },
+        { column_name: 'interest_rate', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 8 },
+        { column_name: 'term_months', data_type: 'integer', is_nullable: 'YES', column_default: null, ordinal_position: 9 },
+        { column_name: 'status', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 10 },
+        { column_name: 'collateral_value', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 11 },
+        { column_name: 'ltv_ratio', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 12 },
+        { column_name: 'origination_date', data_type: 'date', is_nullable: 'YES', column_default: null, ordinal_position: 13 },
+        { column_name: 'created_at', data_type: 'timestamp', is_nullable: 'NO', column_default: null, ordinal_position: 14 },
+      ],
+      silver_accounts: [
+        { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 1 },
+        { column_name: 'account_id', data_type: 'text', is_nullable: 'NO', column_default: null, ordinal_position: 2 },
+        { column_name: 'customer_id', data_type: 'uuid', is_nullable: 'YES', column_default: null, ordinal_position: 3 },
+        { column_name: 'customer_name', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 4 },
+        { column_name: 'account_type', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 5 },
+        { column_name: 'balance', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 6 },
+        { column_name: 'currency', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 7 },
+        { column_name: 'branch_id', data_type: 'uuid', is_nullable: 'YES', column_default: null, ordinal_position: 8 },
+        { column_name: 'branch_name', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 9 },
+        { column_name: 'status', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 10 },
+        { column_name: 'opened_date', data_type: 'date', is_nullable: 'YES', column_default: null, ordinal_position: 11 },
+        { column_name: 'created_at', data_type: 'timestamp', is_nullable: 'NO', column_default: null, ordinal_position: 12 },
+      ],
+      // Gold tables
+      gold_daily_revenue: [
+        { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 1 },
+        { column_name: 'date', data_type: 'date', is_nullable: 'NO', column_default: null, ordinal_position: 2 },
+        { column_name: 'total_revenue', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 3 },
+        { column_name: 'transaction_count', data_type: 'integer', is_nullable: 'YES', column_default: null, ordinal_position: 4 },
+        { column_name: 'avg_transaction_amount', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 5 },
+        { column_name: 'deposit_total', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 6 },
+        { column_name: 'withdrawal_total', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 7 },
+        { column_name: 'transfer_total', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 8 },
+        { column_name: 'created_at', data_type: 'timestamp', is_nullable: 'NO', column_default: null, ordinal_position: 9 },
+        { column_name: 'updated_at', data_type: 'timestamp', is_nullable: 'YES', column_default: null, ordinal_position: 10 },
+      ],
+      gold_branch_metrics: [
+        { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 1 },
+        { column_name: 'branch_id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 2 },
+        { column_name: 'branch_name', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 3 },
+        { column_name: 'region', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 4 },
+        { column_name: 'total_transactions', data_type: 'integer', is_nullable: 'YES', column_default: null, ordinal_position: 5 },
+        { column_name: 'total_revenue', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 6 },
+        { column_name: 'avg_transaction_amount', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 7 },
+        { column_name: 'customer_count', data_type: 'integer', is_nullable: 'YES', column_default: null, ordinal_position: 8 },
+        { column_name: 'created_at', data_type: 'timestamp', is_nullable: 'NO', column_default: null, ordinal_position: 9 },
+      ],
+      gold_loan_summary: [
+        { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 1 },
+        { column_name: 'date', data_type: 'date', is_nullable: 'NO', column_default: null, ordinal_position: 2 },
+        { column_name: 'total_loans', data_type: 'integer', is_nullable: 'YES', column_default: null, ordinal_position: 3 },
+        { column_name: 'total_amount', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 4 },
+        { column_name: 'avg_interest_rate', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 5 },
+        { column_name: 'avg_ltv_ratio', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 6 },
+        { column_name: 'active_loans', data_type: 'integer', is_nullable: 'YES', column_default: null, ordinal_position: 7 },
+        { column_name: 'defaulted_loans', data_type: 'integer', is_nullable: 'YES', column_default: null, ordinal_position: 8 },
+        { column_name: 'created_at', data_type: 'timestamp', is_nullable: 'NO', column_default: null, ordinal_position: 9 },
+      ],
+      gold_customer_360: [
+        { column_name: 'id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 1 },
+        { column_name: 'customer_id', data_type: 'uuid', is_nullable: 'NO', column_default: null, ordinal_position: 2 },
+        { column_name: 'full_name', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 3 },
+        { column_name: 'email', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 4 },
+        { column_name: 'segment', data_type: 'text', is_nullable: 'YES', column_default: null, ordinal_position: 5 },
+        { column_name: 'total_accounts', data_type: 'integer', is_nullable: 'YES', column_default: null, ordinal_position: 6 },
+        { column_name: 'total_balance', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 7 },
+        { column_name: 'total_loans', data_type: 'integer', is_nullable: 'YES', column_default: null, ordinal_position: 8 },
+        { column_name: 'total_loan_amount', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 9 },
+        { column_name: 'total_transactions', data_type: 'integer', is_nullable: 'YES', column_default: null, ordinal_position: 10 },
+        { column_name: 'total_transaction_amount', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 11 },
+        { column_name: 'lifetime_value', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 12 },
+        { column_name: 'risk_score', data_type: 'numeric', is_nullable: 'YES', column_default: null, ordinal_position: 13 },
+        { column_name: 'created_at', data_type: 'timestamp', is_nullable: 'NO', column_default: null, ordinal_position: 14 },
+        { column_name: 'updated_at', data_type: 'timestamp', is_nullable: 'YES', column_default: null, ordinal_position: 15 },
+      ],
+    };
+
+    return schemas[tableName] || [];
   }
 
   private inferDataType(value: unknown): string {
@@ -333,9 +546,13 @@ Always respond with a JSON object containing:
     columns: ColumnProfile[];
   }> {
     // Get row count
-    const { count } = await this.meridianClient
+    const { count, error: countError } = await this.meridianClient
       .from(tableName)
       .select('*', { count: 'exact', head: true });
+
+    if (countError) {
+      await this.log('profile_count_error', `Could not get row count for ${tableName}: ${countError.message}`);
+    }
 
     const rowCount = count || 0;
     const columnProfiles: ColumnProfile[] = [];
@@ -343,19 +560,17 @@ Always respond with a JSON object containing:
     // Profile each column (limited to avoid performance issues)
     for (const col of columns.slice(0, 20)) {
       try {
-        const profile = await this.profileColumn(tableName, col, rowCount);
-        columnProfiles.push(profile);
-      } catch {
-        // Skip columns that fail to profile
-        columnProfiles.push({
-          name: col.column_name,
-          data_type: col.data_type,
-          null_count: 0,
-          null_percentage: 0,
-          distinct_count: 0,
-          distinct_percentage: 0,
-          top_values: [],
-        });
+        // For empty tables, create basic profiles from schema only
+        if (rowCount === 0) {
+          columnProfiles.push(this.createEmptyColumnProfile(col));
+        } else {
+          const profile = await this.profileColumn(tableName, col, rowCount);
+          columnProfiles.push(profile);
+        }
+      } catch (err) {
+        // Skip columns that fail to profile, but still create basic profile
+        await this.log('column_profile_error', `Could not profile column ${col.column_name} in ${tableName}: ${err}`);
+        columnProfiles.push(this.createEmptyColumnProfile(col));
       }
     }
 
@@ -363,6 +578,23 @@ Always respond with a JSON object containing:
       row_count: rowCount,
       column_count: columns.length,
       columns: columnProfiles,
+    };
+  }
+
+  /**
+   * Creates a basic column profile when table is empty or profiling fails
+   */
+  private createEmptyColumnProfile(col: ColumnInfo): ColumnProfile {
+    const semanticType = this.inferSemanticType(col.column_name, col.data_type, []);
+    return {
+      name: col.column_name,
+      data_type: col.data_type,
+      inferred_semantic_type: semanticType,
+      null_count: 0,
+      null_percentage: 0,
+      distinct_count: 0,
+      distinct_percentage: 0,
+      top_values: [],
     };
   }
 
