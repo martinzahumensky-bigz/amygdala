@@ -737,43 +737,43 @@ function ProfilingTab({
             Column Profiles
           </h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="text-left py-3 px-3 font-medium text-gray-500 dark:text-gray-400">
+                <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50">
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Column
                   </th>
-                  <th className="text-left py-3 px-3 font-medium text-gray-500 dark:text-gray-400">
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Type
                   </th>
-                  <th className="text-right py-3 px-3 font-medium text-gray-500 dark:text-gray-400">
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Null %
                   </th>
-                  <th className="text-right py-3 px-3 font-medium text-gray-500 dark:text-gray-400">
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Distinct
                   </th>
-                  <th className="text-left py-3 px-3 font-medium text-gray-500 dark:text-gray-400">
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Min / Max
                   </th>
-                  <th className="text-left py-3 px-3 font-medium text-gray-500 dark:text-gray-400">
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Top Values
                   </th>
-                  <th className="text-center py-3 px-3 font-medium text-gray-500 dark:text-gray-400">
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Status
                   </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {columnProfiles.map((col) => (
                   <>
                     <tr
                       key={col.name}
-                      className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer"
+                      className="group transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer"
                       onClick={() =>
                         setExpandedColumn(expandedColumn === col.name ? null : col.name)
                       }
                     >
-                      <td className="py-3 px-3">
+                      <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           {col.is_sensitive && (
                             <Lock className="h-3.5 w-3.5 text-red-500" />
@@ -788,26 +788,26 @@ function ProfilingTab({
                           )}
                         </div>
                       </td>
-                      <td className="py-3 px-3 text-gray-600 dark:text-gray-400">
+                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                         {col.data_type}
                       </td>
-                      <td className="py-3 px-3 text-right">
+                      <td className="px-4 py-3 text-right">
                         <span
-                          className={
+                          className={`text-sm ${
                             col.null_percentage > 20
                               ? 'text-red-500 font-medium'
                               : col.null_percentage > 5
                               ? 'text-yellow-500'
                               : 'text-green-500'
-                          }
+                          }`}
                         >
                           {col.null_percentage.toFixed(1)}%
                         </span>
                       </td>
-                      <td className="py-3 px-3 text-right text-gray-600 dark:text-gray-400">
+                      <td className="px-4 py-3 text-right text-sm text-gray-600 dark:text-gray-400">
                         {col.distinct_count.toLocaleString()}
                       </td>
-                      <td className="py-3 px-3 text-gray-600 dark:text-gray-400 text-xs">
+                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                         {col.min_value !== undefined && col.max_value !== undefined ? (
                           <span>
                             {String(col.min_value).slice(0, 15)} -{' '}
@@ -817,7 +817,7 @@ function ProfilingTab({
                           '-'
                         )}
                       </td>
-                      <td className="py-3 px-3 text-gray-600 dark:text-gray-400 text-xs">
+                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                         {col.top_values && col.top_values.length > 0
                           ? col.top_values
                               .slice(0, 2)
@@ -825,7 +825,7 @@ function ProfilingTab({
                               .join(', ')
                           : '-'}
                       </td>
-                      <td className="py-3 px-3 text-center">
+                      <td className="px-4 py-3 text-center">
                         {col.null_percentage > 20 || col.ai_insight ? (
                           <AlertCircle className="h-4 w-4 text-yellow-500 mx-auto" />
                         ) : (
@@ -1159,32 +1159,32 @@ function PreviewTab({
           <Badge variant="outline">{sampleData.total.toLocaleString()} total rows</Badge>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
+              <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50">
                 {sampleData.columns.map((col) => (
                   <th
                     key={col.name}
-                    className="text-left py-3 px-3 font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap"
+                    className="px-4 py-3 text-left whitespace-nowrap"
                   >
-                    <div className="flex flex-col gap-1">
-                      <span>{col.name}</span>
-                      <span className="text-xs font-normal text-gray-400">{col.type}</span>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{col.name}</span>
+                      <span className="text-xs font-normal text-gray-400 lowercase">{col.type}</span>
                     </div>
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {sampleData.rows.slice(page * pageSize, (page + 1) * pageSize).map((row, idx) => (
                 <tr
                   key={idx}
-                  className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                  className="group transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50"
                 >
                   {Object.entries(row).map(([key, value]) => (
                     <td
                       key={key}
-                      className={`py-2 px-3 max-w-[200px] truncate ${
+                      className={`px-4 py-3 max-w-[200px] truncate text-sm ${
                         value === null
                           ? 'text-red-500 italic'
                           : 'text-gray-900 dark:text-white'
@@ -1198,13 +1198,12 @@ function PreviewTab({
             </tbody>
           </table>
         </div>
-        {sampleData.rows.length > pageSize && (
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <p className="text-sm text-gray-500">
-              Showing {page * pageSize + 1}-
-              {Math.min((page + 1) * pageSize, sampleData.rows.length)} of{' '}
-              {sampleData.rows.length} sample rows
-            </p>
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3 dark:border-gray-700">
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            Showing {page * pageSize + 1}-{Math.min((page + 1) * pageSize, sampleData.rows.length)} of {sampleData.rows.length} sample rows
+          </span>
+          {sampleData.rows.length > pageSize && (
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -1223,8 +1222,8 @@ function PreviewTab({
                 Next
               </Button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </CardContent>
     </Card>
   );

@@ -488,31 +488,31 @@ export default function DashboardPage() {
               </Link>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto -mx-4">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-200 dark:border-gray-700">
-                      <th className="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50">
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                         Asset Name
                       </th>
-                      <th className="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                         Layer
                       </th>
-                      <th className="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                         Health
                       </th>
-                      <th className="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                         Quality
                       </th>
-                      <th className="pb-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                         Actions
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                     {data.topAssets.map((asset) => (
-                      <tr key={asset.id} className="group">
-                        <td className="py-3">
+                      <tr key={asset.id} className="group transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <td className="px-4 py-3">
                           <Link
                             href={`/dashboard/catalog/${asset.id}`}
                             className="font-medium text-gray-900 hover:text-primary-600 dark:text-white dark:hover:text-primary-400"
@@ -520,10 +520,10 @@ export default function DashboardPage() {
                             {asset.name}
                           </Link>
                         </td>
-                        <td className="py-3">
+                        <td className="px-4 py-3">
                           <Badge variant="default" className="capitalize">{asset.layer}</Badge>
                         </td>
-                        <td className="py-3">
+                        <td className="px-4 py-3">
                           <span
                             className={`inline-flex h-2 w-2 rounded-full ${
                               asset.fitnessStatus === 'green'
@@ -534,10 +534,10 @@ export default function DashboardPage() {
                             }`}
                           />
                         </td>
-                        <td className="py-3">
+                        <td className="px-4 py-3">
                           <QualityBar value={asset.quality} />
                         </td>
-                        <td className="py-3 text-right">
+                        <td className="px-4 py-3 text-right">
                           <Link href={`/dashboard/catalog/${asset.id}`}>
                             <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100">
                               <ArrowRight className="h-4 w-4" />

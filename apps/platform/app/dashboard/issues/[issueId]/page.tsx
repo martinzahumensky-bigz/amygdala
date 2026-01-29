@@ -452,33 +452,33 @@ export default function IssueDetailPage({
                 Sample Affected Records
               </h3>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50">
                       {Object.keys(sampleRecords[0] || {})
                         .slice(0, 6)
                         .map((key) => (
                           <th
                             key={key}
-                            className="text-left py-2 px-3 font-medium text-gray-500 dark:text-gray-400"
+                            className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
                           >
                             {key}
                           </th>
                         ))}
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                     {sampleRecords.map((record, idx) => (
                       <tr
                         key={idx}
-                        className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                        className="group transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50"
                       >
                         {Object.entries(record)
                           .slice(0, 6)
                           .map(([key, value]) => (
                             <td
                               key={key}
-                              className={`py-2 px-3 ${
+                              className={`px-4 py-3 text-sm ${
                                 value === null
                                   ? 'text-red-500 italic'
                                   : 'text-gray-900 dark:text-white'
@@ -492,9 +492,12 @@ export default function IssueDetailPage({
                   </tbody>
                 </table>
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-                Showing {sampleRecords.length} sample records
-              </p>
+              {/* Footer */}
+              <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3 dark:border-gray-700">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  Showing {sampleRecords.length} sample records
+                </span>
+              </div>
             </CardContent>
           </Card>
         )}

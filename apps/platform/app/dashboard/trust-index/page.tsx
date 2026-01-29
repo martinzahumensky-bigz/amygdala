@@ -466,7 +466,7 @@ export default function TrustIndexPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700">
+                <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50">
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Asset
                   </th>
@@ -486,7 +486,7 @@ export default function TrustIndexPage() {
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {assetScores.slice(0, 10).map((asset) => (
-                  <tr key={asset.assetId} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                  <tr key={asset.assetId} className="group transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50">
                     <td className="px-4 py-3">
                       <Link
                         href={`/dashboard/catalog/${asset.assetId}`}
