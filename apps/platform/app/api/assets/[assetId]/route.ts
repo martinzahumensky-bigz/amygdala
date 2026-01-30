@@ -77,6 +77,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       id: rule.id,
       name: rule.name,
       rule_type: rule.rule_type,
+      target_column: rule.target_column, // Include target_column for per-column linking
       expression: rule.expression,
       severity: rule.severity,
       threshold: rule.threshold,
