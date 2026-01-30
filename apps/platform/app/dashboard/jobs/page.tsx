@@ -99,6 +99,73 @@ const typeConfig = {
   scheduled: { label: 'Scheduled', color: 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400' },
 };
 
+// Helper to extract agent-specific stats into a display-friendly format
+function extractAgentStats(agentName: string, results: Record<string, unknown> | null | undefined): { label: string; value: number }[] {
+  if (!results) return [];
+
+  const stats = (results.stats || results) as Record<string, number>;
+
+  // Agent-specific stat mappings
+  const agentStatMappings: Record<string, { key: string; label: string }[]> = {
+    documentarist: [
+      { key: 'assetsDiscovered', label: 'Discovered' },
+      { key: 'assetsCreated', label: 'Created' },
+      { key: 'assetsUpdated', label: 'Updated' },
+      { key: 'profilesGenerated', label: 'Profiled' },
+    ],
+    quality: [
+      { key: 'rules_generated', label: 'Rules Gen.' },
+      { key: 'rules_validated', label: 'Validated' },
+      { key: 'rules_passed', label: 'Passed' },
+      { key: 'rules_failed', label: 'Failed' },
+    ],
+    spotter: [
+      { key: 'assetsScanned', label: 'Scanned' },
+      { key: 'tablesScanned', label: 'Tables' },
+      { key: 'checksPerformed', label: 'Checks' },
+      { key: 'anomaliesDetected', label: 'Anomalies' },
+    ],
+    debugger: [
+      { key: 'issuesAnalyzed', label: 'Analyzed' },
+      { key: 'rootCausesFound', label: 'Root Causes' },
+    ],
+    trust: [
+      { key: 'assetsAnalyzed', label: 'Analyzed' },
+      { key: 'trustScoresUpdated', label: 'Updated' },
+    ],
+  };
+
+  const mappings = agentStatMappings[agentName.toLowerCase()] || [];
+  const result: { label: string; value: number }[] = [];
+
+  for (const mapping of mappings) {
+    const value = stats[mapping.key];
+    if (value !== undefined && value !== null) {
+      result.push({ label: mapping.label, value: Number(value) });
+    }
+  }
+
+  // Fallback: if no mapped stats, show raw stats
+  if (result.length === 0) {
+    for (const [key, value] of Object.entries(stats)) {
+      if (typeof value === 'number') {
+        // Convert snake_case/camelCase to readable labels
+        const label = key
+          .replace(/_/g, ' ')
+          .replace(/([A-Z])/g, ' $1')
+          .split(' ')
+          .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(' ')
+          .trim()
+          .slice(0, 12);
+        result.push({ label, value });
+      }
+    }
+  }
+
+  return result.slice(0, 4); // Max 4 stats to display
+}
+
 // Helper functions
 function formatDate(dateStr: string) {
   const date = new Date(dateStr);
@@ -201,24 +268,14 @@ function JobDetailsPanel({ jobId, jobType, onClose }: { jobId: string; jobType: 
       {/* Summary Stats */}
       {run.results && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Card className="p-3">
-            <p className="text-lg font-semibold text-gray-900 dark:text-white">
-              {(run.results as { stats?: { tablesScanned?: number } }).stats?.tablesScanned || 0}
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Tables Scanned</p>
-          </Card>
-          <Card className="p-3">
-            <p className="text-lg font-semibold text-gray-900 dark:text-white">
-              {(run.results as { stats?: { checksPerformed?: number } }).stats?.checksPerformed || 0}
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Checks Performed</p>
-          </Card>
-          <Card className="p-3">
-            <p className="text-lg font-semibold text-gray-900 dark:text-white">
-              {(run.results as { stats?: { anomaliesDetected?: number } }).stats?.anomaliesDetected || 0}
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Anomalies Found</p>
-          </Card>
+          {extractAgentStats(run.agent_name, run.results).map((stat, idx) => (
+            <Card key={idx} className="p-3">
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                {stat.value}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{stat.label}</p>
+            </Card>
+          ))}
           <Card className="p-3">
             <p className="text-lg font-semibold text-gray-900 dark:text-white">
               {(run.results as { issuesCreated?: number }).issuesCreated || 0}
@@ -397,27 +454,19 @@ function JobCard({
               <p className="text-gray-500 dark:text-gray-400">Log Entries</p>
               <p className="font-medium text-gray-900 dark:text-white">{job.logCount || 0}</p>
             </div>
+            {job.results && extractAgentStats(job.agentName || '', job.results).map((stat, idx) => (
+              <div key={idx}>
+                <p className="text-gray-500 dark:text-gray-400">{stat.label}</p>
+                <p className="font-medium text-gray-900 dark:text-white">{stat.value}</p>
+              </div>
+            ))}
             {job.results && (
-              <>
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400">Checks</p>
-                  <p className="font-medium text-gray-900 dark:text-white">
-                    {(job.results as { stats?: { checksPerformed?: number } }).stats?.checksPerformed || 0}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400">Anomalies</p>
-                  <p className="font-medium text-gray-900 dark:text-white">
-                    {(job.results as { stats?: { anomaliesDetected?: number } }).stats?.anomaliesDetected || 0}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400">Issues</p>
-                  <p className="font-medium text-gray-900 dark:text-white">
-                    {(job.results as { issuesCreated?: number }).issuesCreated || 0}
-                  </p>
-                </div>
-              </>
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">Issues</p>
+                <p className="font-medium text-gray-900 dark:text-white">
+                  {(job.results as { issuesCreated?: number }).issuesCreated || 0}
+                </p>
+              </div>
             )}
           </div>
         )}

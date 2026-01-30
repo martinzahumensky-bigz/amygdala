@@ -283,6 +283,155 @@ export async function POST(request: Request) {
     });
     results.byFitness = fitnessCounts;
 
+    // Seed Data Products
+    console.log('Seeding data products...');
+
+    // Clear existing products if clearing
+    if (clearFirst) {
+      await supabase.from('data_product_assets').delete().neq('id', '');
+      await supabase.from('data_products').delete().neq('id', '');
+    }
+
+    // Create data products
+    const dataProducts = [
+      {
+        name: 'Executive Analytics',
+        description: 'Comprehensive analytics suite for executive decision making including revenue, performance, and operational insights.',
+        business_purpose: 'Enable data-driven strategic decisions at the executive level with trusted, high-quality metrics.',
+        domain: 'Finance',
+        type: 'consumer-aligned',
+        status: 'published',
+        owner: 'CFO Office',
+        steward: 'Data Analytics',
+        icon: '📊',
+        color: '#22c55e',
+        tags: ['executive', 'revenue', 'kpi', 'strategic'],
+        published_at: new Date().toISOString(),
+      },
+      {
+        name: 'Customer Intelligence',
+        description: 'Unified customer data product providing 360-degree customer views, segmentation, and service analytics.',
+        business_purpose: 'Empower customer-facing teams with complete, accurate customer information for personalized service.',
+        domain: 'Customer Success',
+        type: 'aggregate',
+        status: 'published',
+        owner: 'Head of Customer Experience',
+        steward: 'Customer Data Team',
+        icon: '👥',
+        color: '#3b82f6',
+        tags: ['customer', '360', 'crm', 'service'],
+        published_at: new Date().toISOString(),
+      },
+      {
+        name: 'Risk & Compliance',
+        description: 'Risk analytics and compliance reporting data product for loan portfolio monitoring and regulatory requirements.',
+        business_purpose: 'Provide risk management team with timely, accurate data for portfolio monitoring and regulatory compliance.',
+        domain: 'Risk & Compliance',
+        type: 'aggregate',
+        status: 'draft',
+        owner: 'Chief Risk Officer',
+        steward: 'Risk Management',
+        icon: '⚠️',
+        color: '#ef4444',
+        tags: ['risk', 'loans', 'compliance', 'regulatory'],
+      },
+      {
+        name: 'Branch Operations',
+        description: 'Operational metrics and performance data for branch network management and optimization.',
+        business_purpose: 'Enable operations team to monitor and optimize branch performance across the network.',
+        domain: 'Operations',
+        type: 'aggregate',
+        status: 'published',
+        owner: 'Head of Operations',
+        steward: 'Operations Team',
+        icon: '🏦',
+        color: '#f59e0b',
+        tags: ['branch', 'operations', 'performance'],
+        published_at: new Date().toISOString(),
+      },
+    ];
+
+    const { data: createdProducts, error: productError } = await supabase
+      .from('data_products')
+      .insert(dataProducts)
+      .select();
+
+    if (productError) {
+      console.error('Failed to seed products:', productError.message);
+      results.productError = productError.message;
+    } else {
+      results.productsCreated = createdProducts?.length || 0;
+
+      // Create asset links based on asset names and product domains
+      const assetMap = new Map(data?.map((a: any) => [a.name, a.id]) || []);
+      const productAssetLinks: { product_id: string; asset_id: string; role: string }[] = [];
+
+      createdProducts?.forEach((product: any) => {
+        if (product.name === 'Executive Analytics') {
+          // Link executive dashboards and revenue data
+          ['Executive Revenue Dashboard', 'Branch Performance Report', 'gold_daily_revenue', 'gold_branch_metrics'].forEach(assetName => {
+            const assetId = assetMap.get(assetName);
+            if (assetId) {
+              productAssetLinks.push({
+                product_id: product.id,
+                asset_id: assetId,
+                role: assetName.includes('Dashboard') || assetName.includes('Report') ? 'primary' : 'supporting',
+              });
+            }
+          });
+        } else if (product.name === 'Customer Intelligence') {
+          // Link customer-related assets
+          ['Customer 360 Application', 'silver_customers', 'ref_customer_segments'].forEach(assetName => {
+            const assetId = assetMap.get(assetName);
+            if (assetId) {
+              productAssetLinks.push({
+                product_id: product.id,
+                asset_id: assetId,
+                role: assetName.includes('Application') ? 'primary' : 'supporting',
+              });
+            }
+          });
+        } else if (product.name === 'Risk & Compliance') {
+          // Link risk-related assets
+          ['Loan Portfolio Report', 'silver_loans', 'bronze_loans'].forEach(assetName => {
+            const assetId = assetMap.get(assetName);
+            if (assetId) {
+              productAssetLinks.push({
+                product_id: product.id,
+                asset_id: assetId,
+                role: assetName.includes('Report') ? 'primary' : 'supporting',
+              });
+            }
+          });
+        } else if (product.name === 'Branch Operations') {
+          // Link operations-related assets
+          ['Branch Performance Report', 'gold_branch_metrics', 'ref_branches', 'silver_transactions'].forEach(assetName => {
+            const assetId = assetMap.get(assetName);
+            if (assetId) {
+              productAssetLinks.push({
+                product_id: product.id,
+                asset_id: assetId,
+                role: assetName.includes('Report') || assetName.includes('gold') ? 'primary' : 'supporting',
+              });
+            }
+          });
+        }
+      });
+
+      if (productAssetLinks.length > 0) {
+        const { error: linkError } = await supabase
+          .from('data_product_assets')
+          .insert(productAssetLinks);
+
+        if (linkError) {
+          console.error('Failed to link assets to products:', linkError.message);
+          results.linkError = linkError.message;
+        } else {
+          results.assetLinksCreated = productAssetLinks.length;
+        }
+      }
+    }
+
     console.log('Asset seed completed!');
 
     return NextResponse.json({
@@ -291,7 +440,9 @@ export async function POST(request: Request) {
       summary: {
         totalAssets: MERIDIAN_ASSETS.length,
         byLayer: layerCounts,
-        byFitness: fitnessCounts
+        byFitness: fitnessCounts,
+        productsCreated: results.productsCreated || 0,
+        assetLinksCreated: results.assetLinksCreated || 0,
       }
     });
   } catch (error) {

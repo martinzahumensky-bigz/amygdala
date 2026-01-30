@@ -25,6 +25,7 @@ import {
   X,
   Shield,
   MessageSquare,
+  Package,
 } from 'lucide-react';
 
 interface NavItem {
@@ -63,6 +64,7 @@ const navigation: NavSection[] = [
         icon: Database,
         children: [
           { name: 'All Assets', href: '/dashboard/catalog', icon: List },
+          { name: 'Data Products', href: '/dashboard/catalog/products', icon: Package },
           { name: 'Report Items', href: '/dashboard/catalog/reports', icon: FileText },
         ],
       },

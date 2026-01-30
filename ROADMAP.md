@@ -499,6 +499,54 @@ Mastering Agent:
 
 ---
 
+### FEAT-023: Automation Agent - Custom Trigger-Action Workflows
+**Status:** Backlog
+**GitHub Issue:** [#9](https://github.com/martinzahumensky-bigz/amygdala/issues/9)
+**Original Prompt:** "Research atlan.com and airtable.com automations - allow users to define logic executed based on triggers or schedules, eg check catalog items without owner and create issue, or auto-assign issues based on description type"
+
+**Purpose:** Enable users to create custom, rule-based workflows that execute automatically based on triggers or schedules. Inspired by Atlan Playbooks, Airtable Automations, and n8n workflows.
+
+**Research Summary:**
+- **Atlan Playbooks:** Event-driven governance automation, auto-tag PII, propagate classifications
+- **Airtable:** 8 trigger types, dynamic tokens, AI actions ("Generate with AI")
+- **n8n:** Node-based workflows, branching logic, sub-workflows, error handling
+
+**Trigger Types:**
+- [ ] Scheduled (cron, daily, weekly, monthly intervals)
+- [ ] Record created/updated (assets, issues, data products)
+- [ ] Record matches condition (e.g., assets without owner)
+- [ ] Agent completed (with result filters)
+- [ ] Webhook received (external integration)
+- [ ] Manual button click
+
+**Action Types:**
+- [ ] Update record (metadata, status, owner assignment)
+- [ ] Create record (issues, data products)
+- [ ] Send notification (email, Slack, webhook)
+- [ ] Run agent (Spotter, Debugger, Quality, etc.)
+- [ ] Generate with AI (classification, content generation)
+- [ ] Execute external webhook
+- [ ] Conditional branching (if/else logic)
+
+**Example Use Cases:**
+1. Daily check for unowned assets → create governance issue
+2. Auto-assign critical issues based on AI classification
+3. Alert owner when trust score drops below threshold
+4. Auto-classify issue type using AI when created
+
+**Key Components:**
+- [ ] Database schema (automations, runs, schedules, webhooks)
+- [ ] Automation engine with trigger/condition/action evaluation
+- [ ] Token system for dynamic values (`{{record.name}}`, `{{record.owner}}`)
+- [ ] Automations list page with enable/disable toggle
+- [ ] Visual automation builder modal
+- [ ] Run history viewer
+- [ ] Pre-built automation templates gallery
+
+**Implementation Details:** See `docs/FEAT-023-AUTOMATION-AGENT-SPEC.md`
+
+---
+
 ## Completed Features
 
 | ID | Title | Date |
