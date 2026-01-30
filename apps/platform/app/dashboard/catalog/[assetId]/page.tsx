@@ -585,7 +585,8 @@ function OverviewTab({
             isOpen={showTrustDetail}
             onClose={() => setShowTrustDetail(false)}
             factors={trustBreakdown.factors}
-            factorValues={trustBreakdown.factorValues || {
+            factorValues={{
+              // Always derive from factors array to ensure spider chart matches bar chart
               documentation: (trustBreakdown.factors.find(f => f.name === 'Documentation')?.score || 50) / 100,
               governance: (trustBreakdown.factors.find(f => f.name === 'Governance')?.score || 50) / 100,
               quality: (trustBreakdown.factors.find(f => f.name === 'Quality')?.score || 50) / 100,
