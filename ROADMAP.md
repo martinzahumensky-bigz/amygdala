@@ -547,6 +547,34 @@ Mastering Agent:
 
 ---
 
+### FEAT-024: Business Glossary Management
+**Status:** Completed
+**GitHub Issue:** [#10](https://github.com/martinzahumensky-bigz/amygdala/issues/10)
+**Original Prompt:** "we have added functionality of business terms on catalog, can we now finish missing screen for glossary, please research competitors like atlan and collibra before you start and design similar or better solution"
+
+**Research Summary (Atlan & Collibra):**
+- Hierarchical terms and categories (domains)
+- Term metadata: definitions, synonyms, abbreviations, examples
+- Term lifecycle: Draft → Approved → Deprecated
+- Linked assets showing where terms are used
+- Related terms for semantic connections
+- Ownership and stewardship assignment
+- Search and filter by domain/status
+
+**Key Components:**
+- [x] Database schema: `glossary_terms`, `glossary_domains`, `glossary_term_links`
+- [x] API routes: GET/POST /api/glossary, GET/PATCH/DELETE /api/glossary/[termId], GET/POST /api/glossary/domains
+- [x] Glossary list page with grid/list views
+- [x] Search by name, definition, abbreviation
+- [x] Filter by domain and status
+- [x] Term detail panel with linked assets
+- [x] Create/edit term modal
+- [x] Term approval workflow
+- [x] Pre-seeded domains (Finance, Customer, Product, Operations, Marketing, Sales, HR, Technology)
+- [x] Pre-seeded example terms (ARR, MRR, Churn, CAC, LTV, NPS, etc.)
+
+---
+
 ## Completed Features
 
 | ID | Title | Date |
@@ -567,6 +595,7 @@ Mastering Agent:
 | FEAT-020 | Data Structure Tab & Asset Editing | 2026-01-29 |
 | FEAT-021 | Data Products - Asset Grouping | 2026-01-29 |
 | FEAT-022 | Enhanced Trust Index Visualization | 2026-01-30 |
+| FEAT-024 | Business Glossary Management | 2026-01-31 |
 
 ### Agent Implementation Summary
 
