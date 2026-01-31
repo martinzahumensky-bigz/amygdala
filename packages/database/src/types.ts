@@ -318,3 +318,281 @@ export interface MeridianPipeline {
   error_message?: string;
   created_at: string;
 }
+
+// ============================================
+// AUTOMATION TYPES (FEAT-023)
+// ============================================
+
+// Trigger Types
+export type AutomationTriggerType =
+  | 'scheduled'
+  | 'record_created'
+  | 'record_updated'
+  | 'record_matches'
+  | 'agent_completed'
+  | 'webhook'
+  | 'manual';
+
+export type AutomationEntityType = 'asset' | 'issue' | 'data_product' | 'quality_rule';
+
+export interface ScheduledTrigger {
+  type: 'scheduled';
+  interval: {
+    type: 'minutes' | 'hours' | 'days' | 'weeks' | 'months' | 'cron';
+    value: number | string;
+    at?: string; // Time of day (HH:mm)
+    daysOfWeek?: number[]; // 0-6 for weekly
+    dayOfMonth?: number; // 1-31 for monthly
+  };
+}
+
+export interface RecordCreatedTrigger {
+  type: 'record_created';
+  entityType: AutomationEntityType;
+  filter?: AutomationCondition;
+}
+
+export interface RecordUpdatedTrigger {
+  type: 'record_updated';
+  entityType: AutomationEntityType;
+  watchFields?: string[];
+  filter?: AutomationCondition;
+}
+
+export interface RecordMatchesTrigger {
+  type: 'record_matches';
+  entityType: AutomationEntityType;
+  conditions: AutomationCondition[];
+  checkInterval?: number; // Minutes between checks
+}
+
+export interface AgentCompletedTrigger {
+  type: 'agent_completed';
+  agentName?: string;
+  status?: 'success' | 'failed' | 'any';
+  resultFilter?: AutomationCondition;
+}
+
+export interface WebhookTrigger {
+  type: 'webhook';
+  webhookId: string;
+  secret?: string;
+}
+
+export interface ManualTrigger {
+  type: 'manual';
+  buttonLabel: string;
+  showOn: ('asset_detail' | 'issue_detail' | 'automation_list')[];
+  requireConfirmation?: boolean;
+}
+
+export type AutomationTrigger =
+  | ScheduledTrigger
+  | RecordCreatedTrigger
+  | RecordUpdatedTrigger
+  | RecordMatchesTrigger
+  | AgentCompletedTrigger
+  | WebhookTrigger
+  | ManualTrigger;
+
+// Condition Types
+export type ConditionOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'not_contains'
+  | 'starts_with'
+  | 'ends_with'
+  | 'matches'
+  | 'greater_than'
+  | 'less_than'
+  | 'greater_than_or_equals'
+  | 'less_than_or_equals'
+  | 'is_empty'
+  | 'is_not_empty'
+  | 'in'
+  | 'not_in';
+
+export interface AutomationCondition {
+  field: string;
+  operator: ConditionOperator;
+  value?: unknown;
+  logic?: 'and' | 'or';
+}
+
+// Action Types
+export type AutomationActionType =
+  | 'update_record'
+  | 'create_record'
+  | 'send_notification'
+  | 'run_agent'
+  | 'execute_webhook'
+  | 'generate_with_ai'
+  | 'delay'
+  | 'conditional_branch';
+
+export interface UpdateRecordAction {
+  type: 'update_record';
+  target: 'trigger_record' | 'related_record';
+  relatedRecordQuery?: {
+    entityType: AutomationEntityType;
+    filter: AutomationCondition[];
+  };
+  updates: Array<{
+    field: string;
+    value: unknown; // Can include tokens like {{record.name}}
+  }>;
+}
+
+export interface CreateRecordAction {
+  type: 'create_record';
+  entityType: 'issue' | 'data_product';
+  data: Record<string, unknown>;
+}
+
+export interface SendNotificationAction {
+  type: 'send_notification';
+  channel: 'email' | 'slack' | 'webhook';
+  recipients?: string[];
+  slackChannel?: string;
+  webhookUrl?: string;
+  template: {
+    subject?: string;
+    body: string;
+  };
+}
+
+export interface RunAgentAction {
+  type: 'run_agent';
+  agentName: 'spotter' | 'debugger' | 'quality' | 'documentarist' | 'trust' | 'transformation';
+  context?: {
+    assetId?: string;
+    issueId?: string;
+    parameters?: Record<string, unknown>;
+  };
+  waitForCompletion?: boolean;
+}
+
+export interface ExecuteWebhookAction {
+  type: 'execute_webhook';
+  url: string;
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  headers?: Record<string, string>;
+  body?: Record<string, unknown>;
+  retryOnFailure?: boolean;
+  retryCount?: number;
+}
+
+export interface GenerateWithAIAction {
+  type: 'generate_with_ai';
+  prompt: string;
+  outputField: string;
+  outputType: 'text' | 'json' | 'classification';
+  options?: {
+    choices?: string[];
+    maxTokens?: number;
+  };
+}
+
+export interface DelayAction {
+  type: 'delay';
+  duration: number;
+  unit: 'seconds' | 'minutes' | 'hours';
+}
+
+export interface ConditionalBranchAction {
+  type: 'conditional_branch';
+  conditions: AutomationCondition[];
+  ifTrue: AutomationAction[];
+  ifFalse?: AutomationAction[];
+}
+
+export type AutomationAction =
+  | UpdateRecordAction
+  | CreateRecordAction
+  | SendNotificationAction
+  | RunAgentAction
+  | ExecuteWebhookAction
+  | GenerateWithAIAction
+  | DelayAction
+  | ConditionalBranchAction;
+
+// Settings
+export interface AutomationSettings {
+  runLimit?: number;
+  cooldownMinutes?: number;
+  errorHandling: 'stop' | 'continue' | 'notify';
+}
+
+// Main Automation Interface
+export interface Automation {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  trigger: AutomationTrigger;
+  conditions: AutomationCondition[];
+  actions: AutomationAction[];
+  settings: AutomationSettings;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  last_run_at?: string;
+  run_count: number;
+}
+
+export interface AutomationInsert {
+  name: string;
+  description?: string;
+  enabled?: boolean;
+  trigger: AutomationTrigger;
+  conditions?: AutomationCondition[];
+  actions: AutomationAction[];
+  settings?: Partial<AutomationSettings>;
+  created_by: string;
+}
+
+// Automation Run
+export type AutomationRunStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped';
+
+export interface AutomationActionResult {
+  actionType: AutomationActionType;
+  actionIndex: number;
+  status: 'success' | 'failed' | 'skipped';
+  result?: unknown;
+  error?: string;
+  duration_ms: number;
+}
+
+export interface AutomationRun {
+  id: string;
+  automation_id: string;
+  trigger_type: AutomationTriggerType;
+  trigger_data?: Record<string, unknown>;
+  status: AutomationRunStatus;
+  actions_executed: AutomationActionResult[];
+  records_processed: number;
+  error_message?: string;
+  started_at: string;
+  completed_at?: string;
+  duration_ms?: number;
+}
+
+// Schedule
+export interface AutomationSchedule {
+  id: string;
+  automation_id: string;
+  next_run_at: string;
+  last_run_at?: string;
+}
+
+// Webhook
+export interface AutomationWebhook {
+  id: string;
+  automation_id: string;
+  webhook_id: string;
+  secret?: string;
+  created_at: string;
+  last_called_at?: string;
+  call_count: number;
+}

@@ -26,6 +26,8 @@ import {
   Shield,
   MessageSquare,
   Package,
+  RefreshCw,
+  Zap,
 } from 'lucide-react';
 
 interface NavItem {
@@ -46,6 +48,7 @@ const navigation: NavSection[] = [
       { name: 'Home', href: '/dashboard', icon: Home },
       { name: 'Chat', href: '/dashboard/chat', icon: MessageSquare },
       { name: 'AI Agents', href: '/dashboard/agents', icon: Sparkles },
+      { name: 'Automations', href: '/dashboard/automations', icon: Zap },
       { name: 'Jobs', href: '/dashboard/jobs', icon: PlayCircle },
       { name: 'Search', href: '/dashboard/search', icon: Search },
     ],
@@ -84,6 +87,7 @@ const navigation: NavSection[] = [
       { name: 'Trust Index', href: '/dashboard/trust-index', icon: Shield },
       { name: 'Data Quality', href: '/dashboard/quality', icon: CheckCircle2 },
       { name: 'Issues', href: '/dashboard/issues', icon: List },
+      { name: 'Transformations', href: '/dashboard/transformations', icon: RefreshCw },
       { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
     ],
   },
