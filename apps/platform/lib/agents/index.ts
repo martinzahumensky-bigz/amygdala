@@ -7,6 +7,7 @@ export { OperatorAgent, getOperatorAgent } from './operator';
 export { TrustAgent, getTrustAgent } from './trust';
 export { QualityAgent, getQualityAgent } from './quality';
 export { TransformationAgent, getTransformationAgent } from './transformation';
+export { AnalystAgent, getAnalystAgent } from './analyst';
 export type { OperationType, OperationRequest, OperationResult } from './operator';
 export type { TrustChangeEvent } from './trust';
 export type { QualityRule, QualityValidationResult } from './quality';
@@ -17,6 +18,11 @@ export type {
   TransformationPreview,
   IterationResult,
 } from './transformation';
+export type {
+  AnalystChatMessage,
+  TableRecommendation,
+  AnalystResponse,
+} from './analyst';
 
 // Agent registry
 import { getSpotterAgent } from './spotter';
@@ -26,8 +32,9 @@ import { getOperatorAgent } from './operator';
 import { getTrustAgent } from './trust';
 import { getQualityAgent } from './quality';
 import { getTransformationAgent } from './transformation';
+import { getAnalystAgent } from './analyst';
 
-export type AgentName = 'spotter' | 'debugger' | 'quality' | 'trust' | 'documentarist' | 'transformation' | 'operator';
+export type AgentName = 'spotter' | 'debugger' | 'quality' | 'trust' | 'documentarist' | 'transformation' | 'operator' | 'analyst';
 
 export function getAgent(name: AgentName) {
   switch (name.toLowerCase()) {
@@ -45,11 +52,13 @@ export function getAgent(name: AgentName) {
       return getQualityAgent();
     case 'transformation':
       return getTransformationAgent();
+    case 'analyst':
+      return getAnalystAgent();
     default:
       throw new Error(`Agent "${name}" not implemented yet`);
   }
 }
 
 export function getAvailableAgents(): AgentName[] {
-  return ['spotter', 'documentarist', 'debugger', 'operator', 'trust', 'quality', 'transformation'];
+  return ['spotter', 'documentarist', 'debugger', 'operator', 'trust', 'quality', 'transformation', 'analyst'];
 }

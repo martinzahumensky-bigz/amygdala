@@ -47,6 +47,7 @@ const navigation: NavSection[] = [
     items: [
       { name: 'Home', href: '/dashboard', icon: Home },
       { name: 'Chat', href: '/dashboard/chat', icon: MessageSquare },
+      { name: 'Analyst', href: '/dashboard/analyst', icon: BarChart3 },
       { name: 'AI Agents', href: '/dashboard/agents', icon: Sparkles },
       { name: 'Automations', href: '/dashboard/automations', icon: Zap },
       { name: 'Jobs', href: '/dashboard/jobs', icon: PlayCircle },
