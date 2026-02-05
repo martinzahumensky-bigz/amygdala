@@ -616,6 +616,28 @@ Analyst Agent:
 
 ---
 
+### FEAT-026: Homepage Landing Section
+**Status:** Completed
+**GitHub Issue:** [#12](https://github.com/martinzahumensky-bigz/amygdala/issues/12)
+**Original Prompt:** "Create a landing section on homepage explaining what Amygdala is about - brain analogy and five core pillars"
+
+**Purpose:** Add comprehensive landing section explaining Amygdala's purpose and key differentiators through the brain analogy and five technology pillars.
+
+**Key Components:**
+- [x] Brain analogy section explaining why "Amygdala" (threat detection, autonomous response)
+- [x] Visual threat detection flow diagram showing issue detection → agent activation → resolution
+- [x] Five pillars section with detailed descriptions:
+  - Multi-Agent Architecture (specialized AI agents that collaborate)
+  - AI as Interface (natural language as primary interface)
+  - MCP-First Integration (autonomous agent support via MCP)
+  - Dynamic Code Generation (ephemeral sandbox execution)
+  - Intelligent Automation Agents (beyond traditional workflows)
+- [x] Links to relevant dashboard sections (/agents, /chat, /analyst, /transformations, /automations)
+- [x] Responsive design with mobile-first approach
+- [x] Dark mode compatible styling
+
+---
+
 ## Completed Features
 
 | ID | Title | Date |
@@ -638,6 +660,7 @@ Analyst Agent:
 | FEAT-022 | Enhanced Trust Index Visualization | 2026-01-30 |
 | FEAT-024 | Business Glossary Management | 2026-01-31 |
 | FEAT-025 | Analyst Agent with Ataccama MCP | 2026-02-05 |
+| FEAT-026 | Homepage Landing Section | 2026-02-05 |
 
 ### Agent Implementation Summary
 
