@@ -180,6 +180,16 @@ Be concise but thorough. The goal is to help users trust their analytical result
    * Process a chat message from the user
    */
   async chat(userMessage: string, history?: AnalystChatMessage[]): Promise<AnalystResponse> {
+    // Check API key first
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      console.error('[Analyst] ANTHROPIC_API_KEY not set');
+      return {
+        message: 'The AI service is not configured. Please set the ANTHROPIC_API_KEY environment variable.',
+        suggestions: ['Check environment configuration'],
+      };
+    }
+
     // Try to connect to MCP if not in demo mode
     if (!DEMO_MODE && (!this.mcpClient || !this.mcpClient.isReady())) {
       const connected = await this.initializeMCP();
@@ -200,23 +210,39 @@ Be concise but thorough. The goal is to help users trust their analytical result
     messages.push({ role: 'user', content: userMessage });
 
     try {
-      // Call Claude API with tools
-      const response = await this.anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 4096,
-        system: this.systemPrompt,
-        messages,
-        tools: ANALYST_TOOLS,
+      // Call Claude API with tools using fetch (more reliable than SDK in serverless)
+      const fetchResponse = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: 4096,
+          system: this.systemPrompt,
+          messages,
+          tools: ANALYST_TOOLS,
+        }),
       });
+
+      if (!fetchResponse.ok) {
+        const errorText = await fetchResponse.text();
+        console.error('[Analyst] API error:', fetchResponse.status, errorText);
+        throw new Error(`API error ${fetchResponse.status}: ${errorText.slice(0, 200)}`);
+      }
+
+      const response = await fetchResponse.json();
 
       // Check if Claude wants to use tools
       if (response.stop_reason === 'tool_use') {
-        return await this.handleToolUse(response, messages);
+        return await this.handleToolUse(response, messages, apiKey);
       }
 
       // Extract text response
-      const textBlock = response.content.find((block) => block.type === 'text');
-      const responseText = textBlock && 'text' in textBlock ? textBlock.text : 'I could not process your request.';
+      const textBlock = response.content.find((block: any) => block.type === 'text');
+      const responseText = textBlock?.text || 'I could not process your request.';
 
       return {
         message: responseText,
@@ -224,8 +250,9 @@ Be concise but thorough. The goal is to help users trust their analytical result
       };
     } catch (error) {
       console.error('[Analyst] Chat error:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       return {
-        message: 'I encountered an error processing your request. Please try again.',
+        message: `I encountered an error: ${errorMsg.slice(0, 100)}. Please try again.`,
         suggestions: ['Try rephrasing your request', 'Check if Ataccama is accessible'],
       };
     }
@@ -235,14 +262,15 @@ Be concise but thorough. The goal is to help users trust their analytical result
    * Handle tool use requests from Claude
    */
   private async handleToolUse(
-    response: Anthropic.Message,
-    messages: Anthropic.MessageParam[]
+    response: any,
+    messages: Anthropic.MessageParam[],
+    apiKey: string
   ): Promise<AnalystResponse> {
     const toolUseBlocks = response.content.filter(
-      (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use'
+      (block: any) => block.type === 'tool_use'
     );
 
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
+    const toolResults: any[] = [];
     const toolsUsed: string[] = [];
     const recommendations: TableRecommendation[] = [];
 
@@ -264,28 +292,43 @@ Be concise but thorough. The goal is to help users trust their analytical result
       });
     }
 
-    // Send tool results back to Claude
+    // Send tool results back to Claude using fetch
     const updatedMessages: Anthropic.MessageParam[] = [
       ...messages,
       { role: 'assistant', content: response.content },
       { role: 'user', content: toolResults },
     ];
 
-    const finalResponse = await this.anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 4096,
-      system: this.systemPrompt,
-      messages: updatedMessages,
-      tools: ANALYST_TOOLS,
+    const fetchResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 4096,
+        system: this.systemPrompt,
+        messages: updatedMessages,
+        tools: ANALYST_TOOLS,
+      }),
     });
+
+    if (!fetchResponse.ok) {
+      const errorText = await fetchResponse.text();
+      throw new Error(`API error: ${errorText}`);
+    }
+
+    const finalResponse = await fetchResponse.json();
 
     // Handle recursive tool use
     if (finalResponse.stop_reason === 'tool_use') {
-      return await this.handleToolUse(finalResponse, updatedMessages);
+      return await this.handleToolUse(finalResponse, updatedMessages, apiKey);
     }
 
-    const textBlock = finalResponse.content.find((block) => block.type === 'text');
-    const responseText = textBlock && 'text' in textBlock ? textBlock.text : 'Analysis complete.';
+    const textBlock = finalResponse.content.find((block: any) => block.type === 'text');
+    const responseText = textBlock?.text || 'Analysis complete.';
 
     return {
       message: responseText,
