@@ -588,19 +588,20 @@ Mastering Agent:
 ---
 
 ### FEAT-025: Analyst Agent with Ataccama MCP Integration
-**Status:** In Progress
+**Status:** Completed
 **GitHub Issue:** [#11](https://github.com/martinzahumensky-bigz/amygdala/issues/11)
 **Original Prompt:** "Create demo how autonomous agent can use Ataccama MCP to find the best tables for analytical work based on data quality scores"
 
 **Purpose:** Demonstrate how an autonomous AI agent can leverage external MCP tools (Ataccama) to help business users find reliable data for their analytical needs.
 
 **Key Features:**
-- [ ] MCP client helper to spawn Ataccama MCP server
-- [ ] Analyst agent with Ataccama tool integration
-- [ ] Chat-based interface for natural language requests
-- [ ] Table recommendations with DQ scores and reasoning
-- [ ] Dedicated /dashboard/analyst page
-- [ ] Suggested prompts for quick starts
+- [x] MCP client helper to spawn Ataccama MCP server
+- [x] Analyst agent with Ataccama tool integration
+- [x] Chat-based interface for natural language requests
+- [x] Table recommendations with DQ scores and reasoning
+- [x] Dedicated /dashboard/analyst page
+- [x] Suggested prompts for quick starts
+- [x] Demo mode with mock data for showcasing without Ataccama
 
 **Example Interaction:**
 ```
@@ -636,6 +637,7 @@ Analyst Agent:
 | FEAT-021 | Data Products - Asset Grouping | 2026-01-29 |
 | FEAT-022 | Enhanced Trust Index Visualization | 2026-01-30 |
 | FEAT-024 | Business Glossary Management | 2026-01-31 |
+| FEAT-025 | Analyst Agent with Ataccama MCP | 2026-02-05 |
 
 ### Agent Implementation Summary
 
@@ -649,4 +651,4 @@ Analyst Agent:
 | Trust | ✅ Complete | FEAT-010 |
 | Orchestrator | ✅ Complete | FEAT-016 |
 | Transformation | ✅ Complete | FEAT-019 |
-| **Analyst** | 🔄 In Progress | FEAT-025 |
+| Analyst | ✅ Complete | FEAT-025 |
