@@ -28,6 +28,7 @@ import {
   Package,
   RefreshCw,
   Zap,
+  Info,
 } from 'lucide-react';
 
 interface NavItem {
@@ -230,7 +231,14 @@ export function Sidebar() {
         </nav>
 
         {/* Footer */}
-        <div className="border-t border-gray-200 p-4 dark:border-gray-700">
+        <div className="border-t border-gray-200 p-4 dark:border-gray-700 space-y-1">
+          <Link
+            href="/dashboard/about"
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
+            <Info className="h-5 w-5" />
+            <span>What is Amygdala?</span>
+          </Link>
           <Link
             href="/dashboard/settings"
             className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
