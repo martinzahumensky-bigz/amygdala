@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Poppins } from 'next/font/google';
 import './globals.css';
+import { DataTrustBubble } from '@/components/trust';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -22,6 +23,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${poppins.variable} font-sans min-h-screen bg-slate-50 antialiased`}>
         {children}
+        <DataTrustBubble showOnAdminPages={false} />
       </body>
     </html>
   );

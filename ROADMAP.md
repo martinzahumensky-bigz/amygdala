@@ -293,31 +293,34 @@ AI agents querying data today face critical issues:
 ---
 
 ### FEAT-014: Visual Spotter & Data Trust Bubble
-**Status:** In Progress
+**Status:** Completed (MVP)
 **GitHub Issue:** [#13](https://github.com/martinzahumensky-bigz/amygdala/issues/13)
 **Original Prompt:** "Create a data trust bot embedded in applications that looks at UI like a human and validates data visually"
 
 **Purpose:** Extend Spotter to look at data the way humans do—through the actual UI—instead of only querying databases.
 
-**The Problem:**
-- Current Spotter only queries database
-- Database truth ≠ Presentation truth (what users SEE)
-- Users distrust data based on visual anomalies (missing charts, "[Unknown]" labels, stale dates)
+**MVP Implementation (Completed):**
+- [x] Floating Data Trust Bubble component (collapsed/expanded states)
+- [x] Trust score display with gauge and stars (adapted from TrustAtGlance)
+- [x] DOM-based visual anomaly detection ([UNKNOWN], alerts, stale data, zeros, empty tables)
+- [x] Page context awareness (route to asset mapping)
+- [x] Issue reporting form with auto-context capture
+- [x] API proxy to Platform trust endpoints
 
-**Solution: Chrome Extension + Floating Widget**
-- **Data Trust Bubble** - Floating widget like 100sharp.com showing real-time trust score
-- **Visual Scanner** - AI-powered DOM analysis to detect visual anomalies
-- **Click-Through Validation** - Navigate UI like a human to validate data
-- **Issue Reporting** - Let users report issues directly from the bubble
+**Key Components:**
+- `DataTrustBubble.tsx` - Main floating widget
+- `BubbleCollapsed.tsx` - Eye icon with status ring
+- `BubbleExpanded.tsx` - 320px panel with trust score and anomalies
+- `TrustScoreDisplay.tsx` - Gauge and star rating
+- `AnomalyList.tsx` - Visual anomaly list
+- `IssueReportForm.tsx` - Modal for reporting issues
 
-**Key Features:**
-- [ ] Chrome extension with content script for DOM reading
-- [ ] Floating "eye" widget showing trust score (green/amber/red)
-- [ ] Visual anomaly detection (missing data, "[Unknown]", errors)
-- [ ] Claude-powered screenshot analysis for complex anomalies
-- [ ] Click-through validation using Chrome DevTools Protocol
-- [ ] User issue reporting with auto-captured context
-- [ ] Real-time trust updates as page changes
+**Future Enhancements (Phase 2):**
+- [ ] Chrome extension version
+- [ ] AI-powered screenshot analysis
+- [ ] Click-through validation automation
+- [ ] Real-time MutationObserver updates
+- [ ] Drag-to-reposition bubble
 
 **Implementation Details:** See `docs/FEAT-014-VISUAL-SPOTTER-SPEC.md`
 
@@ -661,6 +664,7 @@ Analyst Agent:
 | FEAT-024 | Business Glossary Management | 2026-01-31 |
 | FEAT-025 | Analyst Agent with Ataccama MCP | 2026-02-05 |
 | FEAT-026 | Homepage Landing Section | 2026-02-05 |
+| FEAT-014 | Data Trust Bubble (MVP) | 2026-02-05 |
 
 ### Agent Implementation Summary
 
