@@ -5,6 +5,7 @@
 
 import { getAmygdalaClient } from '@/lib/supabase/client';
 import { getAgent } from '@/lib/agents';
+import { getAtaccamaMCPClient } from '@/lib/mcp/client';
 import {
   AutomationAction,
   UpdateRecordAction,
@@ -540,18 +541,6 @@ async function executeCheckAtaccamaDQ(
     };
   }
 
-  // Use the Analyst agent's mock data for demo
-  // In production, this would connect to Ataccama MCP
-  const MOCK_DQ_DATA: Record<string, { dqScore: number; source: string; owner?: string; lastProfiled?: string }> = {
-    'CUSTOMER_360': { dqScore: 94.2, source: 'Snowflake / PROD_DW', owner: 'data-engineering@acme.com', lastProfiled: '2026-02-05T08:00:00Z' },
-    'CUSTOMER_RAW': { dqScore: 78.5, source: 'Snowflake / STAGING', owner: 'ingestion-team@acme.com', lastProfiled: '2026-02-04T06:00:00Z' },
-    'TRANSACTIONS_GOLD': { dqScore: 91.8, source: 'Snowflake / PROD_DW', owner: 'finance-data@acme.com', lastProfiled: '2026-02-05T07:00:00Z' },
-    'REVENUE_DAILY': { dqScore: 88.3, source: 'Snowflake / PROD_DW', owner: 'bi-team@acme.com', lastProfiled: '2026-02-05T07:30:00Z' },
-    'FRAUD_EVENTS': { dqScore: 96.5, source: 'Snowflake / SECURITY_DW', owner: 'security-team@acme.com', lastProfiled: '2026-02-05T08:00:00Z' },
-    'BANK_TRANSACTIONS': { dqScore: 89.7, source: 'Snowflake / PROD_DW', owner: 'core-banking@acme.com', lastProfiled: '2026-02-05T06:00:00Z' },
-    'CUSTOMER_LEGACY': { dqScore: 52.1, source: 'Oracle / LEGACY_DB', owner: 'legacy-support@acme.com', lastProfiled: '2025-12-15T14:00:00Z' },
-  };
-
   const thresholds = {
     excellent: action.thresholds?.excellent ?? 90,
     good: action.thresholds?.good ?? 75,
@@ -563,6 +552,7 @@ async function executeCheckAtaccamaDQ(
   const results: Array<{
     table: string;
     found: boolean;
+    catalogItemId?: string;
     dqScore?: number;
     status: 'excellent' | 'good' | 'fair' | 'poor' | 'unknown';
     source?: string;
@@ -573,55 +563,172 @@ async function executeCheckAtaccamaDQ(
 
   const issuesCreated: string[] = [];
 
+  // Try to connect to Ataccama MCP
+  let mcpClient = null;
+  let useMockData = false;
+
+  try {
+    mcpClient = await getAtaccamaMCPClient();
+    console.log('[Automation] Connected to Ataccama MCP');
+  } catch (error) {
+    console.warn('[Automation] Could not connect to Ataccama MCP, using fallback data:', error);
+    useMockData = true;
+  }
+
+  // Fallback mock data (used when MCP is not available)
+  const FALLBACK_DQ_DATA: Record<string, { dqScore: number; source: string; owner?: string; lastProfiled?: string }> = {
+    'CUSTOMER_360': { dqScore: 94.2, source: 'Snowflake / PROD_DW', owner: 'data-engineering@acme.com', lastProfiled: '2026-02-05T08:00:00Z' },
+    'CUSTOMER_RAW': { dqScore: 78.5, source: 'Snowflake / STAGING', owner: 'ingestion-team@acme.com', lastProfiled: '2026-02-04T06:00:00Z' },
+    'TRANSACTIONS_GOLD': { dqScore: 91.8, source: 'Snowflake / PROD_DW', owner: 'finance-data@acme.com', lastProfiled: '2026-02-05T07:00:00Z' },
+    'REVENUE_DAILY': { dqScore: 88.3, source: 'Snowflake / PROD_DW', owner: 'bi-team@acme.com', lastProfiled: '2026-02-05T07:30:00Z' },
+    'FRAUD_EVENTS': { dqScore: 96.5, source: 'Snowflake / SECURITY_DW', owner: 'security-team@acme.com', lastProfiled: '2026-02-05T08:00:00Z' },
+    'BANK_TRANSACTIONS': { dqScore: 89.7, source: 'Snowflake / PROD_DW', owner: 'core-banking@acme.com', lastProfiled: '2026-02-05T06:00:00Z' },
+    'CUSTOMER_LEGACY': { dqScore: 52.1, source: 'Oracle / LEGACY_DB', owner: 'legacy-support@acme.com', lastProfiled: '2025-12-15T14:00:00Z' },
+  };
+
   for (const tableName of tableNames) {
     const upperName = tableName.toUpperCase();
-    const data = MOCK_DQ_DATA[upperName];
 
-    if (!data) {
+    if (useMockData || !mcpClient) {
+      // Use fallback mock data
+      const data = FALLBACK_DQ_DATA[upperName];
+
+      if (!data) {
+        results.push({
+          table: tableName,
+          found: false,
+          status: 'unknown',
+          trusted: false,
+        });
+        continue;
+      }
+
+      let status: 'excellent' | 'good' | 'fair' | 'poor';
+      if (data.dqScore >= thresholds.excellent) {
+        status = 'excellent';
+      } else if (data.dqScore >= thresholds.good) {
+        status = 'good';
+      } else if (data.dqScore >= thresholds.fair) {
+        status = 'fair';
+      } else {
+        status = 'poor';
+      }
+
+      const trusted = data.dqScore >= failureThreshold;
+
       results.push({
         table: tableName,
-        found: false,
-        status: 'unknown',
-        trusted: false,
+        found: true,
+        dqScore: data.dqScore,
+        status,
+        source: data.source + ' (fallback)',
+        owner: data.owner,
+        lastProfiled: data.lastProfiled,
+        trusted,
       });
-      continue;
-    }
-
-    let status: 'excellent' | 'good' | 'fair' | 'poor';
-    if (data.dqScore >= thresholds.excellent) {
-      status = 'excellent';
-    } else if (data.dqScore >= thresholds.good) {
-      status = 'good';
-    } else if (data.dqScore >= thresholds.fair) {
-      status = 'fair';
     } else {
-      status = 'poor';
+      // Use real Ataccama MCP
+      try {
+        // Search for the catalog item by name
+        const searchResult = await mcpClient.searchCatalogItems(tableName, action.connectionTypes);
+
+        if (!searchResult.success || !searchResult.data?.items?.length) {
+          results.push({
+            table: tableName,
+            found: false,
+            status: 'unknown',
+            trusted: false,
+          });
+          continue;
+        }
+
+        // Find best match (exact name match preferred)
+        const items = searchResult.data.items;
+        const exactMatch = items.find((item: { name?: string }) =>
+          item.name?.toUpperCase() === upperName
+        );
+        const catalogItem = exactMatch || items[0];
+        const catalogItemId = catalogItem.id;
+
+        // Get DQ overview for this catalog item
+        const dqResult = await mcpClient.getCatalogItemDQOverview(catalogItemId);
+
+        let dqScore = 0;
+        let source = catalogItem.connection_name || catalogItem.source || 'Unknown';
+        let owner = catalogItem.owner_email || catalogItem.steward_email;
+        let lastProfiled = catalogItem.last_profiled_at;
+
+        if (dqResult.success && dqResult.data) {
+          // Extract overall DQ score from the response
+          const dqData = dqResult.data;
+          if (typeof dqData.overall_score === 'number') {
+            dqScore = dqData.overall_score * 100; // Convert 0-1 to percentage
+          } else if (typeof dqData.dq_score === 'number') {
+            dqScore = dqData.dq_score;
+          } else if (dqData.dq_overview?.overall_score !== undefined) {
+            dqScore = dqData.dq_overview.overall_score * 100;
+          } else {
+            // Try to calculate from individual scores
+            const scores = [
+              dqData.validity_score,
+              dqData.completeness_score,
+              dqData.uniqueness_score,
+              dqData.consistency_score,
+            ].filter(s => typeof s === 'number');
+
+            if (scores.length > 0) {
+              dqScore = (scores.reduce((a, b) => a + b, 0) / scores.length) * 100;
+            }
+          }
+        }
+
+        let status: 'excellent' | 'good' | 'fair' | 'poor';
+        if (dqScore >= thresholds.excellent) {
+          status = 'excellent';
+        } else if (dqScore >= thresholds.good) {
+          status = 'good';
+        } else if (dqScore >= thresholds.fair) {
+          status = 'fair';
+        } else {
+          status = 'poor';
+        }
+
+        const trusted = dqScore >= failureThreshold;
+
+        results.push({
+          table: tableName,
+          found: true,
+          catalogItemId,
+          dqScore: Math.round(dqScore * 10) / 10, // Round to 1 decimal
+          status,
+          source: source + ' (Ataccama)',
+          owner,
+          lastProfiled,
+          trusted,
+        });
+      } catch (error) {
+        console.error(`[Automation] Error fetching DQ for ${tableName}:`, error);
+        results.push({
+          table: tableName,
+          found: false,
+          status: 'unknown',
+          trusted: false,
+        });
+      }
     }
-
-    const trusted = data.dqScore >= failureThreshold;
-
-    results.push({
-      table: tableName,
-      found: true,
-      dqScore: data.dqScore,
-      status,
-      source: data.source,
-      owner: data.owner,
-      lastProfiled: data.lastProfiled,
-      trusted,
-    });
 
     // Create issue if DQ below threshold
-    if (action.createIssueOnFailure && !trusted) {
+    const lastResult = results[results.length - 1];
+    if (action.createIssueOnFailure && lastResult.found && !lastResult.trusted) {
       const supabase = getAmygdalaClient();
       const { data: issue } = await supabase
         .from('issues')
         .insert({
-          title: `Low Data Quality: ${tableName} (${data.dqScore}%)`,
-          description: `Automated DQ check found that ${tableName} has a data quality score of ${data.dqScore}%, which is below the threshold of ${failureThreshold}%. Source: ${data.source}. Owner: ${data.owner || 'Unknown'}.`,
-          severity: data.dqScore < 50 ? 'critical' : 'high',
+          title: `Low Data Quality: ${lastResult.table} (${lastResult.dqScore}%)`,
+          description: `Automated DQ check found that ${lastResult.table} has a data quality score of ${lastResult.dqScore}%, which is below the threshold of ${failureThreshold}%. Source: ${lastResult.source}. Owner: ${lastResult.owner || 'Unknown'}.`,
+          severity: (lastResult.dqScore || 0) < 50 ? 'critical' : 'high',
           issue_type: 'quality_failure',
-          affected_assets: [tableName],
+          affected_assets: [lastResult.table],
           created_by: 'automation',
           status: 'open',
         })
@@ -645,11 +752,13 @@ async function executeCheckAtaccamaDQ(
     poor: results.filter(r => r.status === 'poor').length,
     allTrusted: results.every(r => r.trusted),
     issuesCreated: issuesCreated.length,
+    dataSource: useMockData ? 'fallback' : 'ataccama_mcp',
   };
 
   // Build report text
+  const sourceNote = useMockData ? ' (using fallback data - MCP unavailable)' : ' (from Ataccama MCP)';
   const reportLines = [
-    `📊 **Data Quality Report** - ${new Date().toLocaleString()}`,
+    `📊 **Data Quality Report** - ${new Date().toLocaleString()}${sourceNote}`,
     '',
     `**Summary:** ${summary.tablesFound}/${summary.totalTables} tables checked`,
     `✅ Excellent: ${summary.excellent} | 🟢 Good: ${summary.good} | 🟡 Fair: ${summary.fair} | 🔴 Poor: ${summary.poor}`,
