@@ -28,6 +28,8 @@ import {
   Edit,
   Copy,
   Eye,
+  Shield,
+  X,
 } from 'lucide-react';
 import {
   Automation,
@@ -115,6 +117,7 @@ function getActionSummary(actions: AutomationAction[]): string {
       case 'send_notification': return `Notify via ${action.channel}`;
       case 'generate_with_ai': return 'Generate with AI';
       case 'execute_webhook': return 'Call webhook';
+      case 'check_ataccama_dq': return `Check DQ (${(action as { tables?: string[] }).tables?.length || 0} tables)`;
       default: return action.type;
     }
   }
@@ -577,6 +580,17 @@ function AutomationBuilderModal({ automation, onClose, onSave }: AutomationBuild
   const [actionType, setActionType] = useState('create_record');
   const [isSaving, setIsSaving] = useState(false);
 
+  // Ataccama DQ action config
+  const [dqTables, setDqTables] = useState<string[]>(['BANK_TRANSACTIONS', 'CUSTOMER_360']);
+  const [dqTableInput, setDqTableInput] = useState('');
+  const [dqFailureThreshold, setDqFailureThreshold] = useState('70');
+  const [dqCreateIssue, setDqCreateIssue] = useState(true);
+  const [notifyChannel, setNotifyChannel] = useState<'email' | 'webhook'>('email');
+  const [notifyRecipients, setNotifyRecipients] = useState('data-team@company.com');
+
+  // Run agent action config
+  const [agentName, setAgentName] = useState<string>('spotter');
+
   const handleSave = async () => {
     try {
       setIsSaving(true);
@@ -628,16 +642,47 @@ function AutomationBuilderModal({ automation, onClose, onSave }: AutomationBuild
         case 'run_agent':
           actions.push({
             type: 'run_agent',
-            agentName: 'spotter',
+            agentName: agentName as 'spotter' | 'debugger' | 'quality' | 'documentarist' | 'trust' | 'transformation' | 'analyst',
           });
           break;
         case 'send_notification':
           actions.push({
             type: 'send_notification',
-            channel: 'webhook',
-            webhookUrl: '{{env.SLACK_WEBHOOK_URL}}',
+            channel: notifyChannel,
+            ...(notifyChannel === 'email'
+              ? { recipients: notifyRecipients.split(',').map(r => r.trim()) }
+              : { webhookUrl: '{{env.SLACK_WEBHOOK_URL}}' }
+            ),
             template: {
+              subject: notifyChannel === 'email' ? `Automation Alert: ${name}` : undefined,
               body: 'Automation "{{automation.name}}" triggered',
+            },
+          });
+          break;
+        case 'check_ataccama_dq':
+          // Add the DQ check action
+          actions.push({
+            type: 'check_ataccama_dq',
+            tables: dqTables,
+            thresholds: {
+              excellent: 90,
+              good: 75,
+              fair: 60,
+            },
+            createIssueOnFailure: dqCreateIssue,
+            failureThreshold: parseInt(dqFailureThreshold),
+          } as AutomationAction);
+          // Add notification action to send report
+          actions.push({
+            type: 'send_notification',
+            channel: notifyChannel,
+            ...(notifyChannel === 'email'
+              ? { recipients: notifyRecipients.split(',').map(r => r.trim()) }
+              : { webhookUrl: '{{env.SLACK_WEBHOOK_URL}}' }
+            ),
+            template: {
+              subject: notifyChannel === 'email' ? `Data Quality Report - {{trigger.timestamp}}` : undefined,
+              body: '{{previous_action.result.report}}',
             },
           });
           break;
@@ -784,17 +829,180 @@ function AutomationBuilderModal({ automation, onClose, onSave }: AutomationBuild
             <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 mb-4">
               Action
             </h3>
-            <div>
-              <label className="block text-sm font-medium mb-1">Then</label>
-              <select
-                value={actionType}
-                onChange={(e) => setActionType(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
-              >
-                <option value="create_record">Create an issue</option>
-                <option value="run_agent">Run an agent</option>
-                <option value="send_notification">Send notification</option>
-              </select>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Then</label>
+                <select
+                  value={actionType}
+                  onChange={(e) => setActionType(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
+                >
+                  <option value="create_record">Create an issue</option>
+                  <option value="run_agent">Run an agent</option>
+                  <option value="send_notification">Send notification</option>
+                  <option value="check_ataccama_dq">Check Ataccama Data Quality</option>
+                </select>
+              </div>
+
+              {/* Run agent config */}
+              {actionType === 'run_agent' && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Agent</label>
+                  <select
+                    value={agentName}
+                    onChange={(e) => setAgentName(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
+                  >
+                    <option value="spotter">Spotter (Anomaly Detection)</option>
+                    <option value="debugger">Debugger (Root Cause Analysis)</option>
+                    <option value="quality">Quality Agent (Rule Generation)</option>
+                    <option value="documentarist">Documentarist (Documentation)</option>
+                    <option value="trust">Trust Agent (Score Calculation)</option>
+                    <option value="transformation">Transformation Agent</option>
+                    <option value="analyst">Analyst (Ataccama MCP)</option>
+                  </select>
+                </div>
+              )}
+
+              {/* Send notification config */}
+              {actionType === 'send_notification' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Channel</label>
+                    <select
+                      value={notifyChannel}
+                      onChange={(e) => setNotifyChannel(e.target.value as 'email' | 'webhook')}
+                      className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
+                    >
+                      <option value="email">Email</option>
+                      <option value="webhook">Webhook (Slack)</option>
+                    </select>
+                  </div>
+                  {notifyChannel === 'email' && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Recipients (comma-separated)</label>
+                      <Input
+                        value={notifyRecipients}
+                        onChange={(e) => setNotifyRecipients(e.target.value)}
+                        placeholder="team@company.com, alerts@company.com"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Ataccama DQ check config */}
+              {actionType === 'check_ataccama_dq' && (
+                <div className="space-y-4 p-4 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800">
+                  <div className="flex items-center gap-2 text-cyan-700 dark:text-cyan-400">
+                    <Shield className="h-4 w-4" />
+                    <span className="text-sm font-medium">Ataccama DQ Check Configuration</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Tables to Check</label>
+                    <div className="flex gap-2 mb-2">
+                      <Input
+                        value={dqTableInput}
+                        onChange={(e) => setDqTableInput(e.target.value.toUpperCase())}
+                        placeholder="TABLE_NAME"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && dqTableInput.trim()) {
+                            e.preventDefault();
+                            if (!dqTables.includes(dqTableInput.trim())) {
+                              setDqTables([...dqTables, dqTableInput.trim()]);
+                            }
+                            setDqTableInput('');
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          if (dqTableInput.trim() && !dqTables.includes(dqTableInput.trim())) {
+                            setDqTables([...dqTables, dqTableInput.trim()]);
+                          }
+                          setDqTableInput('');
+                        }}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {dqTables.map((table) => (
+                        <span
+                          key={table}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300 rounded"
+                        >
+                          {table}
+                          <button
+                            type="button"
+                            onClick={() => setDqTables(dqTables.filter(t => t !== table))}
+                            className="hover:text-red-500"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Press Enter or click + to add tables. Common tables: BANK_TRANSACTIONS, CUSTOMER_360, TRANSACTIONS_GOLD
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Failure Threshold</label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={dqFailureThreshold}
+                        onChange={(e) => setDqFailureThreshold(e.target.value)}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Create issue if DQ score below this %
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 pt-6">
+                      <input
+                        type="checkbox"
+                        id="dqCreateIssue"
+                        checked={dqCreateIssue}
+                        onChange={(e) => setDqCreateIssue(e.target.checked)}
+                        className="rounded border-gray-300"
+                      />
+                      <label htmlFor="dqCreateIssue" className="text-sm">
+                        Create issues for failures
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-cyan-200 dark:border-cyan-800 pt-4">
+                    <label className="block text-sm font-medium mb-1">Send Report Via</label>
+                    <select
+                      value={notifyChannel}
+                      onChange={(e) => setNotifyChannel(e.target.value as 'email' | 'webhook')}
+                      className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
+                    >
+                      <option value="email">Email</option>
+                      <option value="webhook">Webhook (Slack)</option>
+                    </select>
+                  </div>
+
+                  {notifyChannel === 'email' && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Recipients (comma-separated)</label>
+                      <Input
+                        value={notifyRecipients}
+                        onChange={(e) => setNotifyRecipients(e.target.value)}
+                        placeholder="data-team@company.com"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
