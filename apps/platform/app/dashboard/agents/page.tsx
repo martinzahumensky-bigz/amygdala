@@ -68,10 +68,10 @@ const agentConfigs: AgentConfig[] = [
   {
     id: 'transformation',
     name: 'Transformation Agent',
-    description: 'Repairs data and creates derived assets',
+    description: 'Transforms and repairs data with self-improving AI iteration loop',
     icon: RefreshCw,
     color: 'bg-pink-500',
-    available: false,
+    available: true,
   },
   {
     id: 'documentarist',

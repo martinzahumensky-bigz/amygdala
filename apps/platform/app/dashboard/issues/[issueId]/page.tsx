@@ -23,6 +23,8 @@ import {
   Lightbulb,
   History,
   ExternalLink,
+  RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 
 interface Issue {
@@ -145,6 +147,9 @@ export default function IssueDetailPage({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showTransformModal, setShowTransformModal] = useState(false);
+  const [isCreatingTransform, setIsCreatingTransform] = useState(false);
+  const [transformationType, setTransformationType] = useState<string>('null_remediation');
 
   const fetchIssue = useCallback(async () => {
     try {
@@ -201,6 +206,48 @@ export default function IssueDetailPage({
       console.error('Failed to update status:', err);
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const createTransformation = async () => {
+    if (!data) return;
+
+    setIsCreatingTransform(true);
+    try {
+      const targetAsset = data.issue.affected_assets?.[0] || data.agentReasoning?.table || '';
+      const targetColumn = data.agentReasoning?.column;
+
+      const res = await fetch('/api/agents/transformation/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceType: 'issue',
+          sourceId: data.issue.id,
+          targetAsset,
+          targetColumn,
+          transformationType,
+          description: `Fix: ${data.issue.title}`,
+          parameters: {
+            issueType: data.issue.issue_type,
+            severity: data.issue.severity,
+            metadata: data.issue.metadata,
+          },
+          requestedBy: 'current-user',
+        }),
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        setShowTransformModal(false);
+        router.push(`/dashboard/transformations?highlight=${result.plan?.id}`);
+      } else {
+        const errorData = await res.json();
+        console.error('Failed to create transformation:', errorData);
+      }
+    } catch (err) {
+      console.error('Failed to create transformation:', err);
+    } finally {
+      setIsCreatingTransform(false);
     }
   };
 
@@ -597,6 +644,14 @@ export default function IssueDetailPage({
                 <Wrench className="h-4 w-4" />
                 Analyze with Debugger
               </Button>
+              <Button
+                variant="outline"
+                className="gap-2 border-pink-300 text-pink-600 hover:bg-pink-50 dark:border-pink-700 dark:text-pink-400 dark:hover:bg-pink-900/20"
+                onClick={() => setShowTransformModal(true)}
+              >
+                <RefreshCw className="h-4 w-4" />
+                Apply Fix
+              </Button>
               <Button variant="outline" className="gap-2" onClick={() => updateStatus('investigating')}>
                 <User className="h-4 w-4" />
                 Assign to Me
@@ -613,6 +668,106 @@ export default function IssueDetailPage({
           </CardContent>
         </Card>
       </main>
+
+      {/* Apply Fix / Transformation Modal */}
+      {showTransformModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-lg w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="rounded-lg bg-pink-100 dark:bg-pink-900/30 p-2">
+                <RefreshCw className="h-5 w-5 text-pink-600 dark:text-pink-400" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  Apply Fix with Transformation Agent
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Create an automated fix for this issue
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Issue
+                </label>
+                <p className="text-gray-900 dark:text-white font-medium">{issue.title}</p>
+                <p className="text-sm text-gray-500">{issue.issue_type.replace('_', ' ')}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Target Asset
+                </label>
+                <p className="font-mono text-gray-900 dark:text-white">
+                  {issue.affected_assets?.[0] || agentReasoning?.table || 'Unknown'}
+                  {agentReasoning?.column && (
+                    <span className="text-purple-600 dark:text-purple-400">
+                      .{agentReasoning.column}
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Transformation Type
+                </label>
+                <Dropdown
+                  placeholder="Select type"
+                  value={transformationType}
+                  options={[
+                    { value: 'null_remediation', label: 'Null Remediation - Fill missing values' },
+                    { value: 'format_standardization', label: 'Format Standardization - Fix formats' },
+                    { value: 'outlier_correction', label: 'Outlier Correction - Fix anomalies' },
+                    { value: 'referential_fix', label: 'Referential Fix - Fix relationships' },
+                    { value: 'deduplication', label: 'Deduplication - Remove duplicates' },
+                    { value: 'custom_sql', label: 'Custom SQL - Write custom fix' },
+                  ]}
+                  onChange={(value) => setTransformationType(value)}
+                />
+              </div>
+
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
+                <div className="flex items-start gap-2">
+                  <Sparkles className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-blue-700 dark:text-blue-300">
+                    <p className="font-medium">AI-Powered Fix</p>
+                    <p className="text-blue-600 dark:text-blue-400">
+                      The Transformation Agent will analyze the issue, generate code to fix it,
+                      and iterate until it achieves 95% accuracy. You&apos;ll review and approve before execution.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button variant="ghost" onClick={() => setShowTransformModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={createTransformation}
+                disabled={isCreatingTransform}
+                className="bg-pink-600 hover:bg-pink-700"
+              >
+                {isCreatingTransform ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Create Transformation
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
