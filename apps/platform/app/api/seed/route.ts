@@ -248,26 +248,28 @@ export async function POST(request: Request) {
       .from('assets')
       .select('*', { count: 'exact', head: true });
 
+    let data: any[] = [];
     if (count && count > 0 && !clearFirst) {
-      return NextResponse.json({
-        success: true,
-        message: 'Assets already exist. Use ?clear=true to replace them.',
-        existingCount: count
-      });
+      // Assets exist, skip asset seeding but continue to automations
+      results.assetsSkipped = true;
+      results.existingAssetCount = count;
+      // Fetch existing assets for linking
+      const { data: existingAssets } = await supabase.from('assets').select('id, name');
+      data = existingAssets || [];
+    } else {
+      // Insert assets
+      console.log(`Seeding ${MERIDIAN_ASSETS.length} assets...`);
+      const { data: insertedAssets, error } = await supabase
+        .from('assets')
+        .insert(MERIDIAN_ASSETS)
+        .select();
+
+      if (error) {
+        throw new Error(`Failed to seed assets: ${error.message}`);
+      }
+      data = insertedAssets || [];
+      results.assetsCreated = insertedAssets?.length || 0;
     }
-
-    // Insert assets
-    console.log(`Seeding ${MERIDIAN_ASSETS.length} assets...`);
-    const { data, error } = await supabase
-      .from('assets')
-      .insert(MERIDIAN_ASSETS)
-      .select();
-
-    if (error) {
-      throw new Error(`Failed to seed assets: ${error.message}`);
-    }
-
-    results.assetsCreated = data?.length || 0;
 
     // Count by layer
     const layerCounts: Record<string, number> = {};
