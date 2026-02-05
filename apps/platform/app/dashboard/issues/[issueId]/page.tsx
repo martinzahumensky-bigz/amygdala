@@ -239,10 +239,13 @@ export default function IssueDetailPage({
       if (res.ok) {
         const result = await res.json();
         setShowTransformModal(false);
-        router.push(`/dashboard/transformations?highlight=${result.plan?.id}`);
+        // Show success feedback and redirect
+        alert('Transformation plan created! The AI is now iterating to improve the fix. Check the Transformations page for status.');
+        router.push(`/dashboard/transformations`);
       } else {
         const errorData = await res.json();
         console.error('Failed to create transformation:', errorData);
+        alert(`Failed to create transformation: ${errorData.error || 'Unknown error'}`);
       }
     } catch (err) {
       console.error('Failed to create transformation:', err);

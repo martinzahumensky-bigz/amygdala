@@ -249,12 +249,19 @@ When generating transformation code, always structure output as:
 
       await this.log('plan_created', `Created transformation plan ${plan.id}`, { planId: plan.id });
 
-      // Start the iteration loop
-      const finalPlan = await this.runIterationLoop(plan);
+      // Start the iteration loop in background (don't await)
+      // This prevents Vercel timeout - the loop runs asynchronously
+      this.runIterationLoop(plan)
+        .then(async (finalPlan) => {
+          await this.completeRun(runId, { planId: finalPlan.id, status: finalPlan.status }, true);
+        })
+        .catch(async (error) => {
+          console.error('Iteration loop failed:', error);
+          await this.failRun(runId, error instanceof Error ? error.message : 'Unknown error');
+        });
 
-      await this.completeRun(runId, { planId: finalPlan.id, status: finalPlan.status }, true);
-
-      return this.mapDbPlanToInterface(finalPlan);
+      // Return the draft plan immediately
+      return this.mapDbPlanToInterface(plan);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       await this.failRun(runId, errorMessage);

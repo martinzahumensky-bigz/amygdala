@@ -293,8 +293,8 @@ AI agents querying data today face critical issues:
 ---
 
 ### FEAT-014: Visual Spotter & Data Trust Bubble
-**Status:** Planned
-**GitHub Issue:** TBD
+**Status:** In Progress
+**GitHub Issue:** [#13](https://github.com/martinzahumensky-bigz/amygdala/issues/13)
 **Original Prompt:** "Create a data trust bot embedded in applications that looks at UI like a human and validates data visually"
 
 **Purpose:** Extend Spotter to look at data the way humans do—through the actual UI—instead of only querying databases.
