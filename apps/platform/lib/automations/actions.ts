@@ -15,6 +15,7 @@ import {
   GenerateWithAIAction,
   DelayAction,
   ConditionalBranchAction,
+  CheckAtaccamaDQAction,
   AutomationActionResult,
   AutomationEntityType,
 } from '@amygdala/database';
@@ -82,6 +83,10 @@ export async function executeAction(
 
       case 'conditional_branch':
         result = await executeConditionalBranch(action, context, actionIndex);
+        break;
+
+      case 'check_ataccama_dq':
+        result = await executeCheckAtaccamaDQ(action, context);
         break;
 
       default:
@@ -512,6 +517,170 @@ async function executeConditionalBranch(
     branch: conditionsMet ? 'ifTrue' : 'ifFalse',
     actions: branchResults.length,
     results: branchResults,
+  };
+}
+
+async function executeCheckAtaccamaDQ(
+  action: CheckAtaccamaDQAction,
+  context: ActionExecutionContext
+): Promise<unknown> {
+  const { parseTokensDeep } = await import('./tokenParser');
+
+  // Parse tokens in table names (in case they use {{record.name}} etc.)
+  const tableNames = action.tables.map(t =>
+    typeof t === 'string' ? (parseTokensDeep(t, context.tokenContext) as string) : t
+  );
+
+  if (context.dryRun) {
+    return {
+      dryRun: true,
+      action: 'check_ataccama_dq',
+      tables: tableNames,
+      thresholds: action.thresholds,
+    };
+  }
+
+  // Use the Analyst agent's mock data for demo
+  // In production, this would connect to Ataccama MCP
+  const MOCK_DQ_DATA: Record<string, { dqScore: number; source: string; owner?: string; lastProfiled?: string }> = {
+    'CUSTOMER_360': { dqScore: 94.2, source: 'Snowflake / PROD_DW', owner: 'data-engineering@acme.com', lastProfiled: '2026-02-05T08:00:00Z' },
+    'CUSTOMER_RAW': { dqScore: 78.5, source: 'Snowflake / STAGING', owner: 'ingestion-team@acme.com', lastProfiled: '2026-02-04T06:00:00Z' },
+    'TRANSACTIONS_GOLD': { dqScore: 91.8, source: 'Snowflake / PROD_DW', owner: 'finance-data@acme.com', lastProfiled: '2026-02-05T07:00:00Z' },
+    'REVENUE_DAILY': { dqScore: 88.3, source: 'Snowflake / PROD_DW', owner: 'bi-team@acme.com', lastProfiled: '2026-02-05T07:30:00Z' },
+    'FRAUD_EVENTS': { dqScore: 96.5, source: 'Snowflake / SECURITY_DW', owner: 'security-team@acme.com', lastProfiled: '2026-02-05T08:00:00Z' },
+    'BANK_TRANSACTIONS': { dqScore: 89.7, source: 'Snowflake / PROD_DW', owner: 'core-banking@acme.com', lastProfiled: '2026-02-05T06:00:00Z' },
+    'CUSTOMER_LEGACY': { dqScore: 52.1, source: 'Oracle / LEGACY_DB', owner: 'legacy-support@acme.com', lastProfiled: '2025-12-15T14:00:00Z' },
+  };
+
+  const thresholds = {
+    excellent: action.thresholds?.excellent ?? 90,
+    good: action.thresholds?.good ?? 75,
+    fair: action.thresholds?.fair ?? 60,
+  };
+
+  const failureThreshold = action.failureThreshold ?? 60;
+
+  const results: Array<{
+    table: string;
+    found: boolean;
+    dqScore?: number;
+    status: 'excellent' | 'good' | 'fair' | 'poor' | 'unknown';
+    source?: string;
+    owner?: string;
+    lastProfiled?: string;
+    trusted: boolean;
+  }> = [];
+
+  const issuesCreated: string[] = [];
+
+  for (const tableName of tableNames) {
+    const upperName = tableName.toUpperCase();
+    const data = MOCK_DQ_DATA[upperName];
+
+    if (!data) {
+      results.push({
+        table: tableName,
+        found: false,
+        status: 'unknown',
+        trusted: false,
+      });
+      continue;
+    }
+
+    let status: 'excellent' | 'good' | 'fair' | 'poor';
+    if (data.dqScore >= thresholds.excellent) {
+      status = 'excellent';
+    } else if (data.dqScore >= thresholds.good) {
+      status = 'good';
+    } else if (data.dqScore >= thresholds.fair) {
+      status = 'fair';
+    } else {
+      status = 'poor';
+    }
+
+    const trusted = data.dqScore >= failureThreshold;
+
+    results.push({
+      table: tableName,
+      found: true,
+      dqScore: data.dqScore,
+      status,
+      source: data.source,
+      owner: data.owner,
+      lastProfiled: data.lastProfiled,
+      trusted,
+    });
+
+    // Create issue if DQ below threshold
+    if (action.createIssueOnFailure && !trusted) {
+      const supabase = getAmygdalaClient();
+      const { data: issue } = await supabase
+        .from('issues')
+        .insert({
+          title: `Low Data Quality: ${tableName} (${data.dqScore}%)`,
+          description: `Automated DQ check found that ${tableName} has a data quality score of ${data.dqScore}%, which is below the threshold of ${failureThreshold}%. Source: ${data.source}. Owner: ${data.owner || 'Unknown'}.`,
+          severity: data.dqScore < 50 ? 'critical' : 'high',
+          issue_type: 'quality_failure',
+          affected_assets: [tableName],
+          created_by: 'automation',
+          status: 'open',
+        })
+        .select('id')
+        .single();
+
+      if (issue) {
+        issuesCreated.push(issue.id);
+      }
+    }
+  }
+
+  // Generate summary
+  const summary = {
+    totalTables: tableNames.length,
+    tablesFound: results.filter(r => r.found).length,
+    tablesNotFound: results.filter(r => !r.found).length,
+    excellent: results.filter(r => r.status === 'excellent').length,
+    good: results.filter(r => r.status === 'good').length,
+    fair: results.filter(r => r.status === 'fair').length,
+    poor: results.filter(r => r.status === 'poor').length,
+    allTrusted: results.every(r => r.trusted),
+    issuesCreated: issuesCreated.length,
+  };
+
+  // Build report text
+  const reportLines = [
+    `📊 **Data Quality Report** - ${new Date().toLocaleString()}`,
+    '',
+    `**Summary:** ${summary.tablesFound}/${summary.totalTables} tables checked`,
+    `✅ Excellent: ${summary.excellent} | 🟢 Good: ${summary.good} | 🟡 Fair: ${summary.fair} | 🔴 Poor: ${summary.poor}`,
+    '',
+    '**Details:**',
+  ];
+
+  for (const r of results) {
+    const icon = r.status === 'excellent' ? '✅' :
+      r.status === 'good' ? '🟢' :
+        r.status === 'fair' ? '🟡' :
+          r.status === 'poor' ? '🔴' : '❓';
+
+    if (r.found) {
+      reportLines.push(`${icon} **${r.table}**: ${r.dqScore}% (${r.source})`);
+    } else {
+      reportLines.push(`❓ **${r.table}**: Not found in Ataccama catalog`);
+    }
+  }
+
+  if (summary.issuesCreated > 0) {
+    reportLines.push('', `⚠️ Created ${summary.issuesCreated} issue(s) for tables below threshold`);
+  }
+
+  return {
+    checked: true,
+    tables: tableNames,
+    results,
+    summary,
+    report: reportLines.join('\n'),
+    issuesCreated,
   };
 }
 

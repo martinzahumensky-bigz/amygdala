@@ -429,7 +429,8 @@ export type AutomationActionType =
   | 'execute_webhook'
   | 'generate_with_ai'
   | 'delay'
-  | 'conditional_branch';
+  | 'conditional_branch'
+  | 'check_ataccama_dq';
 
 export interface UpdateRecordAction {
   type: 'update_record';
@@ -464,13 +465,26 @@ export interface SendNotificationAction {
 
 export interface RunAgentAction {
   type: 'run_agent';
-  agentName: 'spotter' | 'debugger' | 'quality' | 'documentarist' | 'trust' | 'transformation';
+  agentName: 'spotter' | 'debugger' | 'quality' | 'documentarist' | 'trust' | 'transformation' | 'analyst';
   context?: {
     assetId?: string;
     issueId?: string;
     parameters?: Record<string, unknown>;
   };
   waitForCompletion?: boolean;
+}
+
+export interface CheckAtaccamaDQAction {
+  type: 'check_ataccama_dq';
+  tables: string[]; // List of table names to check in Ataccama
+  thresholds?: {
+    excellent: number; // Default 90
+    good: number;      // Default 75
+    fair: number;      // Default 60
+  };
+  connectionTypes?: string[]; // Filter by connection type (snowflake, oracle, etc.)
+  createIssueOnFailure?: boolean; // Create issue if DQ below threshold
+  failureThreshold?: number; // DQ score below which to create issue (default 60)
 }
 
 export interface ExecuteWebhookAction {
@@ -515,7 +529,8 @@ export type AutomationAction =
   | ExecuteWebhookAction
   | GenerateWithAIAction
   | DelayAction
-  | ConditionalBranchAction;
+  | ConditionalBranchAction
+  | CheckAtaccamaDQAction;
 
 // Settings
 export interface AutomationSettings {
