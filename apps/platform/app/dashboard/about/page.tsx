@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Info,
+  Globe,
 } from 'lucide-react';
 
 const pillars = [
@@ -76,6 +77,17 @@ const pillars = [
     color: 'from-yellow-500 to-orange-600',
     href: '/dashboard/automations',
     linkText: 'Configure Automations',
+  },
+  {
+    title: 'Embedded in End-User Applications',
+    description:
+      'Bring data trust directly to where users consume data. Browser plugins and embedded widgets display trust scores and run quality checks right inside dashboards, reports, and BI tools.',
+    detail:
+      'When analysts view a dashboard or executives review a report, they see the Data Trust Index alongside the data. Issues are flagged in context - no need to switch to a separate governance tool.',
+    icon: Globe,
+    color: 'from-indigo-500 to-blue-600',
+    href: '/dashboard',
+    linkText: 'Coming Soon',
   },
 ];
 
@@ -181,13 +193,13 @@ export default function AboutPage() {
           </CardContent>
         </Card>
 
-        {/* Five Pillars */}
+        {/* Six Pillars */}
         <div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
             Next-Generation Data Trust
           </h2>
           <p className="text-gray-500 dark:text-gray-400 mb-6">
-            Five pillars that define how Amygdala transforms data governance from reactive workflows
+            Six pillars that define how Amygdala transforms data governance from reactive workflows
             to proactive, autonomous intelligence.
           </p>
 
