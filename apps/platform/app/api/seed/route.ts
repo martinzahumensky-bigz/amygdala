@@ -434,6 +434,166 @@ export async function POST(request: Request) {
 
     console.log('Asset seed completed!');
 
+    // Seed sample automations
+    console.log('Seeding sample automations...');
+
+    // Clear existing sample automations if clearing
+    if (clearFirst) {
+      await supabase.from('automation_schedules').delete().neq('id', '');
+      await supabase.from('automation_runs').delete().neq('id', '');
+      await supabase.from('automations').delete().eq('created_by', 'system');
+    }
+
+    // Check if sample automations exist
+    const { count: automationCount } = await supabase
+      .from('automations')
+      .select('*', { count: 'exact', head: true })
+      .eq('created_by', 'system');
+
+    if (!automationCount || automationCount === 0 || clearFirst) {
+      const sampleAutomations = [
+        {
+          name: 'Daily Key Tables DQ Report',
+          description: 'Checks data quality of key business tables via Ataccama MCP every day at 8 AM and sends a report. Creates issues for tables below quality threshold.',
+          enabled: false,
+          trigger: {
+            type: 'scheduled',
+            interval: { type: 'days', value: 1, at: '08:00' }
+          },
+          conditions: [],
+          actions: [
+            {
+              type: 'check_ataccama_dq',
+              tables: ['BANK_TRANSACTIONS', 'CUSTOMER_360', 'TRANSACTIONS_GOLD', 'REVENUE_DAILY'],
+              thresholds: { excellent: 90, good: 75, fair: 60 },
+              createIssueOnFailure: true,
+              failureThreshold: 70
+            },
+            {
+              type: 'send_notification',
+              channel: 'email',
+              recipients: ['data-team@company.com'],
+              template: {
+                subject: 'Daily Data Quality Report - {{trigger.timestamp}}',
+                body: '{{previous_action.result.report}}'
+              }
+            }
+          ],
+          created_by: 'system'
+        },
+        {
+          name: 'Weekly DQ Trend Analysis',
+          description: 'Runs comprehensive DQ check on all critical tables weekly and alerts on any degradation',
+          enabled: false,
+          trigger: {
+            type: 'scheduled',
+            interval: { type: 'weeks', value: 1, at: '06:00', dayOfWeek: 1 }
+          },
+          conditions: [],
+          actions: [
+            {
+              type: 'check_ataccama_dq',
+              tables: ['CUSTOMER_360', 'CUSTOMER_RAW', 'TRANSACTIONS_GOLD', 'REVENUE_DAILY', 'FRAUD_EVENTS', 'BANK_TRANSACTIONS'],
+              thresholds: { excellent: 90, good: 75, fair: 60 },
+              createIssueOnFailure: true,
+              failureThreshold: 60
+            },
+            {
+              type: 'send_notification',
+              channel: 'webhook',
+              webhookUrl: '{{env.SLACK_WEBHOOK_URL}}',
+              template: {
+                body: '⚠️ *Weekly DQ Alert*: Data Quality Report\\n\\n{{previous_action.result.report}}'
+              }
+            }
+          ],
+          created_by: 'system'
+        },
+        {
+          name: 'Daily Unowned Asset Check',
+          description: 'Automatically creates issues for assets without an assigned owner, running every day at 9 AM',
+          enabled: false,
+          trigger: {
+            type: 'scheduled',
+            interval: { type: 'days', value: 1, at: '09:00' }
+          },
+          conditions: [{ field: 'owner', operator: 'is_empty' }],
+          actions: [
+            {
+              type: 'create_record',
+              entityType: 'issue',
+              data: {
+                title: "Asset '{{record.name}}' has no owner",
+                description: 'This asset was detected without an owner during automated governance check.',
+                severity: 'medium',
+                issue_type: 'ownership_missing'
+              }
+            }
+          ],
+          created_by: 'system'
+        },
+        {
+          name: 'Critical Issue Alert',
+          description: 'Sends notification when a critical issue is created',
+          enabled: false,
+          trigger: {
+            type: 'record_created',
+            entityType: 'issue',
+            filter: { field: 'severity', operator: 'equals', value: 'critical' }
+          },
+          conditions: [],
+          actions: [
+            {
+              type: 'send_notification',
+              channel: 'webhook',
+              webhookUrl: '{{env.SLACK_WEBHOOK_URL}}',
+              template: {
+                body: '🚨 Critical issue detected: {{record.title}}'
+              }
+            }
+          ],
+          created_by: 'system'
+        },
+        {
+          name: 'Low Trust Score Monitor',
+          description: "Triggers Debugger agent when an asset's trust score drops below 2 stars",
+          enabled: false,
+          trigger: {
+            type: 'record_matches',
+            entityType: 'asset',
+            conditions: [{ field: 'trust_score_stars', operator: 'less_than', value: 2 }],
+            checkInterval: 60
+          },
+          conditions: [{ field: 'layer', operator: 'in', value: ['gold', 'silver'] }],
+          actions: [
+            {
+              type: 'run_agent',
+              agentName: 'debugger',
+              context: { assetId: '{{record.id}}' }
+            }
+          ],
+          created_by: 'system'
+        }
+      ];
+
+      const { data: createdAutomations, error: automationError } = await supabase
+        .from('automations')
+        .insert(sampleAutomations)
+        .select();
+
+      if (automationError) {
+        console.error('Failed to seed automations:', automationError.message);
+        results.automationError = automationError.message;
+      } else {
+        results.automationsCreated = createdAutomations?.length || 0;
+        console.log(`Created ${createdAutomations?.length || 0} sample automations`);
+      }
+    } else {
+      results.automationsExisting = automationCount;
+    }
+
+    console.log('Seed completed!');
+
     return NextResponse.json({
       success: true,
       results,
@@ -443,6 +603,7 @@ export async function POST(request: Request) {
         byFitness: fitnessCounts,
         productsCreated: results.productsCreated || 0,
         assetLinksCreated: results.assetLinksCreated || 0,
+        automationsCreated: results.automationsCreated || results.automationsExisting || 0,
       }
     });
   } catch (error) {
