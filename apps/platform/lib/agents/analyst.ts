@@ -219,7 +219,7 @@ Be concise but thorough. The goal is to help users trust their analytical result
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-3-5-sonnet-20241022',
+          model: 'claude-3-haiku-20240307',
           max_tokens: 4096,
           system: this.systemPrompt,
           messages,
@@ -307,7 +307,7 @@ Be concise but thorough. The goal is to help users trust their analytical result
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         system: this.systemPrompt,
         messages: updatedMessages,
