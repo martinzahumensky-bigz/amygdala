@@ -314,23 +314,22 @@ export class AutomationEngine {
   }
 
   private async updateAutomationStats(automationId: string): Promise<void> {
-    await this.supabase.rpc('increment_automation_run_count', {
-      automation_id: automationId,
-    }).catch(() => {
-      // Fallback if RPC doesn't exist
-      this.supabase
-        .from('automations')
-        .update({
-          last_run_at: new Date().toISOString(),
-          run_count: this.supabase.rpc('', {}), // This needs proper implementation
-        })
-        .eq('id', automationId);
-    });
+    // Get current run count and increment
+    const { data: automation } = await this.supabase
+      .from('automations')
+      .select('run_count')
+      .eq('id', automationId)
+      .single();
 
-    // Simple update for last_run_at at minimum
+    const newRunCount = (automation?.run_count || 0) + 1;
+
+    // Update automation with new stats
     await this.supabase
       .from('automations')
-      .update({ last_run_at: new Date().toISOString() })
+      .update({
+        last_run_at: new Date().toISOString(),
+        run_count: newRunCount,
+      })
       .eq('id', automationId);
   }
 

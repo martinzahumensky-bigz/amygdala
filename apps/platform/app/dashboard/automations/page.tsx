@@ -1036,9 +1036,19 @@ interface RunHistoryDrawerProps {
   onClose: () => void;
 }
 
+interface ActionResult {
+  actionType: string;
+  actionIndex: number;
+  status: 'success' | 'failed' | 'skipped';
+  result?: unknown;
+  error?: string;
+  duration_ms: number;
+}
+
 function RunHistoryDrawer({ automation, onClose }: RunHistoryDrawerProps) {
   const [runs, setRuns] = useState<AutomationRun[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [expandedRuns, setExpandedRuns] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const fetchRuns = async () => {
@@ -1055,13 +1065,44 @@ function RunHistoryDrawer({ automation, onClose }: RunHistoryDrawerProps) {
     fetchRuns();
   }, [automation.id]);
 
+  const toggleExpand = (runId: string) => {
+    setExpandedRuns(prev => {
+      const next = new Set(prev);
+      if (next.has(runId)) {
+        next.delete(runId);
+      } else {
+        next.add(runId);
+      }
+      return next;
+    });
+  };
+
+  const formatActionResult = (result: unknown): string => {
+    if (!result) return 'No output';
+    if (typeof result === 'string') return result;
+    if (typeof result === 'object') {
+      // Check for report field (DQ check output)
+      const r = result as Record<string, unknown>;
+      if (r.report) return String(r.report);
+      // Check for notification result
+      if (r.sent !== undefined) return `Notification ${r.sent ? 'sent' : 'not sent'} via ${r.channel || 'unknown'}`;
+      // Check for issue creation
+      if (r.created) return `Created ${r.entityType}: ${r.id}`;
+      // Check for agent run
+      if (r.ran) return `Ran ${r.agentName} (${r.success ? 'success' : 'failed'})`;
+      // Default JSON
+      return JSON.stringify(result, null, 2);
+    }
+    return String(result);
+  };
+
   return (
-    <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white dark:bg-gray-900 shadow-xl">
+    <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white dark:bg-gray-900 shadow-xl">
       <div className="flex flex-col h-full">
         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{automation.name} - Run History</h2>
           <Button variant="ghost" size="sm" onClick={onClose}>
-            <XCircle className="h-5 w-5" />
+            <X className="h-5 w-5" />
           </Button>
         </div>
 
@@ -1077,43 +1118,137 @@ function RunHistoryDrawer({ automation, onClose }: RunHistoryDrawerProps) {
             </div>
           ) : (
             <div className="space-y-3">
-              {runs.map((run) => (
-                <div
-                  key={run.id}
-                  className="p-3 rounded-lg border border-gray-200 dark:border-gray-700"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      {run.status === 'success' && (
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      )}
-                      {run.status === 'failed' && (
-                        <XCircle className="h-4 w-4 text-red-500" />
-                      )}
-                      {run.status === 'running' && (
-                        <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                      )}
-                      {run.status === 'skipped' && (
-                        <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                      )}
-                      <span className="font-medium capitalize">{run.status}</span>
-                    </div>
-                    <span className="text-xs text-gray-500">
-                      {new Date(run.started_at).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    <p>Trigger: {run.trigger_type}</p>
-                    <p>Records processed: {run.records_processed}</p>
-                    {run.duration_ms && (
-                      <p>Duration: {(run.duration_ms / 1000).toFixed(2)}s</p>
+              {runs.map((run) => {
+                const isExpanded = expandedRuns.has(run.id);
+                const actions = (run.actions_executed || []) as ActionResult[];
+
+                return (
+                  <div
+                    key={run.id}
+                    className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
+                  >
+                    {/* Header - always visible */}
+                    <button
+                      onClick={() => toggleExpand(run.id)}
+                      className="w-full p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        {run.status === 'success' && (
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        )}
+                        {run.status === 'failed' && (
+                          <XCircle className="h-4 w-4 text-red-500" />
+                        )}
+                        {run.status === 'running' && (
+                          <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                        )}
+                        {run.status === 'skipped' && (
+                          <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                        )}
+                        <span className="font-medium capitalize">{run.status}</span>
+                        <span className="text-xs text-gray-500">
+                          {actions.length > 0 && `• ${actions.length} action(s)`}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">
+                          {new Date(run.started_at).toLocaleString()}
+                        </span>
+                        <ChevronRight
+                          className={`h-4 w-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                        />
+                      </div>
+                    </button>
+
+                    {/* Expanded details */}
+                    {isExpanded && (
+                      <div className="border-t border-gray-200 dark:border-gray-700 p-3 bg-gray-50 dark:bg-gray-800/50">
+                        {/* Basic info */}
+                        <div className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-gray-500">Trigger:</span>{' '}
+                              <span className="font-medium">{run.trigger_type}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Duration:</span>{' '}
+                              <span className="font-medium">
+                                {run.duration_ms ? `${(run.duration_ms / 1000).toFixed(2)}s` : '-'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Records:</span>{' '}
+                              <span className="font-medium">{run.records_processed}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Error message */}
+                        {run.error_message && (
+                          <div className="mb-3 p-2 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                            <p className="text-sm text-red-600 dark:text-red-400 font-medium">Error</p>
+                            <p className="text-sm text-red-500">{run.error_message}</p>
+                          </div>
+                        )}
+
+                        {/* Actions executed */}
+                        {actions.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
+                              Actions Executed
+                            </p>
+                            {actions.map((action, idx) => (
+                              <div
+                                key={idx}
+                                className={`p-2 rounded border ${
+                                  action.status === 'success'
+                                    ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                                    : action.status === 'failed'
+                                    ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                                    : 'bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-sm font-medium">
+                                    {idx + 1}. {action.actionType.replace(/_/g, ' ')}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {action.duration_ms}ms
+                                  </span>
+                                </div>
+
+                                {/* Action output */}
+                                {action.result && (
+                                  <div className="mt-2">
+                                    <p className="text-xs text-gray-500 mb-1">Output:</p>
+                                    <pre className="text-xs bg-white dark:bg-gray-900 p-2 rounded overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto">
+                                      {formatActionResult(action.result)}
+                                    </pre>
+                                  </div>
+                                )}
+
+                                {/* Action error */}
+                                {action.error && (
+                                  <p className="text-xs text-red-500 mt-1">
+                                    Error: {action.error}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* No actions */}
+                        {actions.length === 0 && !run.error_message && (
+                          <p className="text-sm text-gray-500 italic">
+                            No actions were executed
+                          </p>
+                        )}
+                      </div>
                     )}
-                    {run.error_message && (
-                      <p className="text-red-500 mt-1">{run.error_message}</p>
-                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
