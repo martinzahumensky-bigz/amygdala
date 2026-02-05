@@ -5,7 +5,7 @@
 
 import { getAmygdalaClient } from '@/lib/supabase/client';
 import { getAgent } from '@/lib/agents';
-import { getAtaccamaMCPClient } from '@/lib/mcp/client';
+import { getAtaccamaClient } from '@/lib/ataccama/client';
 import {
   AutomationAction,
   UpdateRecordAction,
@@ -563,16 +563,14 @@ async function executeCheckAtaccamaDQ(
 
   const issuesCreated: string[] = [];
 
-  // Try to connect to Ataccama MCP
-  let mcpClient = null;
-  let useMockData = false;
+  // Try to use Ataccama HTTP client
+  const ataccamaClient = getAtaccamaClient();
+  const useMockData = !ataccamaClient.isConfigured();
 
-  try {
-    mcpClient = await getAtaccamaMCPClient();
-    console.log('[Automation] Connected to Ataccama MCP');
-  } catch (error) {
-    console.warn('[Automation] Could not connect to Ataccama MCP, using fallback data:', error);
-    useMockData = true;
+  if (useMockData) {
+    console.warn('[Automation] Ataccama not configured, using fallback data. Set KEYCLOAK_CLIENT_SECRET or ATACCAMA_USERNAME/PASSWORD');
+  } else {
+    console.log('[Automation] Using Ataccama HTTP API');
   }
 
   // Fallback mock data (used when MCP is not available)
@@ -589,7 +587,7 @@ async function executeCheckAtaccamaDQ(
   for (const tableName of tableNames) {
     const upperName = tableName.toUpperCase();
 
-    if (useMockData || !mcpClient) {
+    if (useMockData) {
       // Use fallback mock data
       const data = FALLBACK_DQ_DATA[upperName];
 
@@ -627,12 +625,12 @@ async function executeCheckAtaccamaDQ(
         trusted,
       });
     } else {
-      // Use real Ataccama MCP
+      // Use Ataccama HTTP API
       try {
         // Search for the catalog item by name
-        const searchResult = await mcpClient.searchCatalogItems(tableName, action.connectionTypes);
+        const searchResult = await ataccamaClient.searchCatalogItems(tableName, action.connectionTypes);
 
-        if (!searchResult.success || !searchResult.data?.items?.length) {
+        if (!searchResult.items?.length) {
           results.push({
             table: tableName,
             found: false,
@@ -643,30 +641,27 @@ async function executeCheckAtaccamaDQ(
         }
 
         // Find best match (exact name match preferred)
-        const items = searchResult.data.items;
-        const exactMatch = items.find((item: { name?: string }) =>
+        const items = searchResult.items;
+        const exactMatch = items.find((item) =>
           item.name?.toUpperCase() === upperName
         );
         const catalogItem = exactMatch || items[0];
         const catalogItemId = catalogItem.id;
 
         // Get DQ overview for this catalog item
-        const dqResult = await mcpClient.getCatalogItemDQOverview(catalogItemId);
+        const dqData = await ataccamaClient.getCatalogItemDQOverview(catalogItemId);
 
         let dqScore = 0;
         let source = catalogItem.connection_name || catalogItem.source || 'Unknown';
         let owner = catalogItem.owner_email || catalogItem.steward_email;
         let lastProfiled = catalogItem.last_profiled_at;
 
-        if (dqResult.success && dqResult.data) {
+        if (dqData) {
           // Extract overall DQ score from the response
-          const dqData = dqResult.data;
           if (typeof dqData.overall_score === 'number') {
             dqScore = dqData.overall_score * 100; // Convert 0-1 to percentage
           } else if (typeof dqData.dq_score === 'number') {
             dqScore = dqData.dq_score;
-          } else if (dqData.dq_overview?.overall_score !== undefined) {
-            dqScore = dqData.dq_overview.overall_score * 100;
           } else {
             // Try to calculate from individual scores
             const scores = [
@@ -674,7 +669,7 @@ async function executeCheckAtaccamaDQ(
               dqData.completeness_score,
               dqData.uniqueness_score,
               dqData.consistency_score,
-            ].filter(s => typeof s === 'number');
+            ].filter(s => typeof s === 'number') as number[];
 
             if (scores.length > 0) {
               dqScore = (scores.reduce((a, b) => a + b, 0) / scores.length) * 100;
