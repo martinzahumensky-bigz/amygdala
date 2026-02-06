@@ -45,3 +45,4 @@ coverage/
 # TypeScript
 *.tsbuildinfo
 .env*.local
+apps/platform/.env.pulled
