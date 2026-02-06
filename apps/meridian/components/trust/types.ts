@@ -57,6 +57,28 @@ export interface IssueReport {
   screenshot?: string; // Base64 encoded (future)
 }
 
+export interface CatalogReport {
+  id: string;
+  name: string;
+  description?: string;
+  asset_type: 'report' | 'dashboard' | 'application_screen';
+  fitness_status: 'green' | 'amber' | 'red';
+  trust_score_stars?: number;
+  trust_score_raw?: number;
+  upstream_assets: string[];
+  owner?: string;
+  steward?: string;
+  app_url: string;
+  application: string;
+  sourceAssets?: Array<{
+    id: string;
+    name: string;
+    trust_score_stars?: number;
+    fitness_status: 'green' | 'amber' | 'red';
+    quality_score?: number;
+  }>;
+}
+
 export interface PageContext {
   route: string;
   pageTitle: string;
@@ -66,6 +88,7 @@ export interface PageContext {
   isReportPage: boolean;
   isCRMPage: boolean;
   isAdminPage: boolean;
+  catalogReport?: CatalogReport;
 }
 
 export interface BubbleState {
