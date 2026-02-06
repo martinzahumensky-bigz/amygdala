@@ -2,7 +2,18 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/Header';
-import { Card, CardContent, Badge, Button } from '@amygdala/ui';
+import {
+  Card,
+  CardContent,
+  Badge,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogClose,
+} from '@amygdala/ui';
 import {
   Sparkles,
   Eye,
@@ -19,6 +30,7 @@ import {
   Loader2,
   History,
   Settings2,
+  Info,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useChat, AgentCompleteEvent } from '@/contexts/ChatContext';
@@ -27,6 +39,8 @@ interface AgentConfig {
   id: string;
   name: string;
   description: string;
+  detailedDescription: string;
+  capabilities: string[];
   icon: any;
   color: string;
   available: boolean;
@@ -37,6 +51,16 @@ const agentConfigs: AgentConfig[] = [
     id: 'spotter',
     name: 'Spotter',
     description: 'Detects anomalies that would make users distrust data',
+    detailedDescription:
+      'The Spotter agent continuously monitors your data assets to identify anomalies, outliers, and patterns that could indicate data quality issues. It uses AI-powered analysis to detect problems that would cause users to distrust reports and dashboards.',
+    capabilities: [
+      'Detects missing or null values in critical fields',
+      'Identifies statistical outliers and unusual patterns',
+      'Monitors data freshness and staleness',
+      'Compares current data against historical baselines',
+      'Creates issues automatically for detected anomalies',
+      'Prioritizes findings by business impact',
+    ],
     icon: Eye,
     color: 'bg-cyan-500',
     available: true,
@@ -45,6 +69,16 @@ const agentConfigs: AgentConfig[] = [
     id: 'debugger',
     name: 'Debugger',
     description: 'Investigates issues and finds root causes',
+    detailedDescription:
+      'The Debugger agent performs deep investigation into data quality issues to identify their root causes. It traces data lineage, analyzes transformations, and provides actionable insights to help resolve problems quickly.',
+    capabilities: [
+      'Traces data lineage to find issue origins',
+      'Analyzes ETL/ELT transformation logic',
+      'Identifies upstream data source problems',
+      'Suggests specific fixes and remediation steps',
+      'Links related issues together',
+      'Provides detailed investigation reports',
+    ],
     icon: Wrench,
     color: 'bg-orange-500',
     available: true,
@@ -53,6 +87,16 @@ const agentConfigs: AgentConfig[] = [
     id: 'quality',
     name: 'Quality Agent',
     description: 'Generates and enforces data quality rules',
+    detailedDescription:
+      'The Quality Agent automatically generates and manages data quality rules based on your data patterns and business requirements. It learns from your data to create comprehensive validation rules that ensure data integrity.',
+    capabilities: [
+      'Auto-generates quality rules from data patterns',
+      'Validates data against business rules',
+      'Monitors rule compliance over time',
+      'Suggests new rules based on issues found',
+      'Provides quality scores for assets',
+      'Integrates with data pipelines for validation',
+    ],
     icon: CheckCircle,
     color: 'bg-green-500',
     available: true,
@@ -61,6 +105,16 @@ const agentConfigs: AgentConfig[] = [
     id: 'trust',
     name: 'Trust Agent',
     description: 'Calculates and monitors trust scores',
+    detailedDescription:
+      'The Trust Agent calculates comprehensive trust scores for your data assets based on multiple dimensions including accuracy, completeness, timeliness, and consistency. It helps stakeholders understand how much they can rely on specific data.',
+    capabilities: [
+      'Calculates multi-dimensional trust scores',
+      'Monitors trust trends over time',
+      'Identifies factors affecting trust',
+      'Provides trust explanations for stakeholders',
+      'Alerts on significant trust changes',
+      'Benchmarks against organizational standards',
+    ],
     icon: Star,
     color: 'bg-yellow-500',
     available: true,
@@ -69,6 +123,16 @@ const agentConfigs: AgentConfig[] = [
     id: 'transformation',
     name: 'Transformation Agent',
     description: 'Transforms and repairs data with self-improving AI iteration loop',
+    detailedDescription:
+      'The Transformation Agent uses AI to transform, clean, and repair data automatically. It features a self-improving iteration loop that learns from feedback to continuously enhance data quality and consistency.',
+    capabilities: [
+      'Automatically cleans and standardizes data',
+      'Repairs common data quality issues',
+      'Transforms data to match target schemas',
+      'Learns from corrections to improve over time',
+      'Handles complex data transformations',
+      'Provides before/after comparisons',
+    ],
     icon: RefreshCw,
     color: 'bg-pink-500',
     available: true,
@@ -77,6 +141,16 @@ const agentConfigs: AgentConfig[] = [
     id: 'documentarist',
     name: 'Documentarist',
     description: 'Discovers and documents data assets automatically',
+    detailedDescription:
+      'The Documentarist agent automatically discovers, catalogs, and documents your data assets. It generates comprehensive documentation including descriptions, schemas, relationships, and usage patterns to help teams understand their data.',
+    capabilities: [
+      'Auto-discovers data assets and schemas',
+      'Generates human-readable descriptions',
+      'Maps relationships between assets',
+      'Tracks data lineage and dependencies',
+      'Identifies data owners and stewards',
+      'Keeps documentation up-to-date automatically',
+    ],
     icon: BookOpen,
     color: 'bg-purple-500',
     available: true,
@@ -85,6 +159,16 @@ const agentConfigs: AgentConfig[] = [
     id: 'operator',
     name: 'Operator',
     description: 'Executes approved changes to assets and issues',
+    detailedDescription:
+      'The Operator agent executes approved changes to your data assets and issues. It acts as the execution layer that implements fixes, updates, and modifications suggested by other agents or approved by users.',
+    capabilities: [
+      'Executes approved data modifications',
+      'Updates issue statuses and metadata',
+      'Applies recommended fixes safely',
+      'Maintains audit trail of all changes',
+      'Supports rollback if needed',
+      'Coordinates with other agents',
+    ],
     icon: Settings2,
     color: 'bg-indigo-500',
     available: true,
@@ -114,6 +198,8 @@ export default function AgentsPage() {
   const [runningAgents, setRunningAgents] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [lastRunResult, setLastRunResult] = useState<any>(null);
+  const [infoDialogOpen, setInfoDialogOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<AgentConfig | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -361,7 +447,19 @@ export default function AgentsPage() {
                         <agent.icon className="h-5 w-5 text-white" />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-gray-900 dark:text-white">{agent.name}</h3>
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="font-semibold text-gray-900 dark:text-white">{agent.name}</h3>
+                          <button
+                            onClick={() => {
+                              setSelectedAgent(agent);
+                              setInfoDialogOpen(true);
+                            }}
+                            className="rounded-full p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300 transition-colors"
+                            title={`Learn more about ${agent.name}`}
+                          >
+                            <Info className="h-4 w-4" />
+                          </button>
+                        </div>
                         <p className="text-sm text-gray-500 dark:text-gray-400">{agent.description}</p>
                       </div>
                     </div>
@@ -462,6 +560,68 @@ export default function AgentsPage() {
           </Card>
         )}
       </main>
+
+      {/* Agent Info Dialog */}
+      <Dialog open={infoDialogOpen} onOpenChange={setInfoDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogClose onClose={() => setInfoDialogOpen(false)} />
+          {selectedAgent && (
+            <>
+              <DialogHeader>
+                <div className="flex items-center gap-3">
+                  <div className={`rounded-lg ${selectedAgent.color} p-2.5`}>
+                    <selectedAgent.icon className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <DialogTitle>{selectedAgent.name}</DialogTitle>
+                    <DialogDescription>{selectedAgent.description}</DialogDescription>
+                  </div>
+                </div>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">
+                    How it works
+                  </h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {selectedAgent.detailedDescription}
+                  </p>
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">
+                    Capabilities
+                  </h4>
+                  <ul className="space-y-1.5">
+                    {selectedAgent.capabilities.map((capability, index) => (
+                      <li key={index} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <CheckCircle className="h-4 w-4 mt-0.5 text-green-500 flex-shrink-0" />
+                        <span>{capability}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setInfoDialogOpen(false)}>
+                  Close
+                </Button>
+                {selectedAgent.available && !runningAgents.has(selectedAgent.id) && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      runAgent(selectedAgent.id);
+                      setInfoDialogOpen(false);
+                    }}
+                  >
+                    <PlayCircle className="mr-1.5 h-4 w-4" />
+                    Run {selectedAgent.name}
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

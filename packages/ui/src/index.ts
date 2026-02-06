@@ -8,4 +8,18 @@ export { QualityBar, type QualityBarProps } from './QualityBar';
 export { Tag, type TagProps } from './Tag';
 export { Tooltip, type TooltipProps } from './Tooltip';
 export { Dropdown, type DropdownProps, type DropdownOption } from './Dropdown';
+export {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogClose,
+  type DialogProps,
+  type DialogContentProps,
+  type DialogHeaderProps,
+  type DialogTitleProps,
+  type DialogDescriptionProps,
+  type DialogCloseProps,
+} from './Dialog';
 export { cn } from './utils';
