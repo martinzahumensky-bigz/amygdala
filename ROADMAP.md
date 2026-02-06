@@ -478,7 +478,8 @@ Mastering Agent:
 - [x] TransformationPreviewModal component with code/iterations tabs
 - [x] "Apply Fix" button on issue detail page
 - [x] Sidebar navigation integration
-- [ ] E2B sandbox integration for real code execution (production)
+- [x] E2B sandbox integration for real code execution → See FEAT-027
+- [x] Inngest background jobs for long-running iterations → See FEAT-027
 - [ ] Full data restoration for rollback (production)
 
 **Implementation Details:** See `docs/FEAT-019-TRANSFORMATION-AGENT-SPEC.md`
@@ -641,6 +642,40 @@ Analyst Agent:
 
 ---
 
+### FEAT-027: Inngest + E2B for Transformation Agent
+**Status:** In Progress
+**GitHub Issue:** [#14](https://github.com/martinzahumensky-bigz/amygdala/issues/14)
+**Original Prompt:** "we were working on transformations agent but from some reason we couldnt run it something related to vercel not being able to run longer jobs, what can we do about it"
+
+**Purpose:** Replace fire-and-forget pattern with proper background job infrastructure for the Transformation Agent's self-improving iteration loop.
+
+**Problem:**
+- Vercel serverless functions timeout after 30s (Pro) or 10s (Hobby)
+- Current fire-and-forget pattern loses work if function is killed
+- Code execution was simulated via Claude, not real sandbox
+
+**Solution:**
+- **Inngest:** Orchestrates the iteration loop with retries, progress tracking, and durability
+- **E2B:** Provides real code sandbox execution for generated transformation code
+
+**Key Components:**
+- [x] Install inngest and @e2b/code-interpreter packages
+- [x] Create Inngest client (`lib/inngest/client.ts`)
+- [x] Create E2B sandbox executor (`lib/e2b/sandbox.ts`)
+- [x] Create Inngest transformation function (`lib/inngest/functions/transformation.ts`)
+- [x] Create Inngest API route (`/api/inngest`)
+- [x] Update TransformationAgent to trigger Inngest events
+- [ ] Configure Inngest app in Vercel dashboard
+- [ ] Add E2B_API_KEY and INNGEST_SIGNING_KEY environment variables
+- [ ] Test end-to-end iteration loop
+
+**Environment Variables Required:**
+- `INNGEST_SIGNING_KEY` - From Inngest dashboard
+- `INNGEST_EVENT_KEY` - From Inngest dashboard (optional for dev)
+- `E2B_API_KEY` - From E2B dashboard
+
+---
+
 ## Completed Features
 
 | ID | Title | Date |
@@ -665,6 +700,7 @@ Analyst Agent:
 | FEAT-025 | Analyst Agent with Ataccama MCP | 2026-02-05 |
 | FEAT-026 | Homepage Landing Section | 2026-02-05 |
 | FEAT-014 | Data Trust Bubble (MVP) | 2026-02-05 |
+| FEAT-027 | Inngest + E2B for Transformation Agent | 2026-02-06 |
 
 ### Agent Implementation Summary
 

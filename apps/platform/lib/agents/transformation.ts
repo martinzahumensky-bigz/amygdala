@@ -1,5 +1,6 @@
 import { BaseAgent, AgentContext, AgentRunResult } from './base';
 import { getMeridianClient } from '../supabase/client';
+import { inngest } from '../inngest/client';
 
 // ============================================
 // TYPES
@@ -249,16 +250,36 @@ When generating transformation code, always structure output as:
 
       await this.log('plan_created', `Created transformation plan ${plan.id}`, { planId: plan.id });
 
-      // Start the iteration loop in background (don't await)
-      // This prevents Vercel timeout - the loop runs asynchronously
-      this.runIterationLoop(plan)
-        .then(async (finalPlan) => {
-          await this.completeRun(runId, { planId: finalPlan.id, status: finalPlan.status }, true);
-        })
-        .catch(async (error) => {
-          console.error('Iteration loop failed:', error);
-          await this.failRun(runId, error instanceof Error ? error.message : 'Unknown error');
+      // Trigger Inngest to run the iteration loop
+      // This runs outside of Vercel's timeout limits with retries and durability
+      try {
+        await inngest.send({
+          name: 'transformation/plan.created',
+          data: {
+            planId: plan.id,
+            targetAsset: request.targetAsset,
+            targetColumn: request.targetColumn,
+            transformationType: request.transformationType,
+            description: request.description,
+            parameters: request.parameters || {},
+            accuracyThreshold: request.accuracyThreshold || this.DEFAULT_ACCURACY_THRESHOLD,
+            maxIterations: request.maxIterations || this.DEFAULT_MAX_ITERATIONS,
+            requestedBy: request.requestedBy,
+          },
         });
+        await this.log('inngest_triggered', `Triggered Inngest for plan ${plan.id}`, { planId: plan.id });
+      } catch (inngestError) {
+        // If Inngest fails, fall back to fire-and-forget (for local dev without Inngest)
+        console.warn('Inngest send failed, falling back to local execution:', inngestError);
+        this.runIterationLoop(plan)
+          .then(async (finalPlan) => {
+            await this.completeRun(runId, { planId: finalPlan.id, status: finalPlan.status }, true);
+          })
+          .catch(async (error) => {
+            console.error('Iteration loop failed:', error);
+            await this.failRun(runId, error instanceof Error ? error.message : 'Unknown error');
+          });
+      }
 
       // Return the draft plan immediately
       return this.mapDbPlanToInterface(plan);
