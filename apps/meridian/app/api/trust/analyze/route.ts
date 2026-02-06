@@ -4,11 +4,21 @@ const PLATFORM_URL = process.env.PLATFORM_URL || 'http://localhost:3002';
 
 export const dynamic = 'force-dynamic';
 
+interface VisualAnomaly {
+  id: string;
+  type: string;
+  message: string;
+  severity: 'info' | 'warning' | 'critical';
+  element?: string;
+  value?: string;
+}
+
 interface AnalysisRequest {
   currentSnapshot: any;
   previousSnapshot?: any;
   assetName?: string;
   reportType?: string;
+  visualAnomalies?: VisualAnomaly[];
 }
 
 interface AIAnomaly {
@@ -30,7 +40,7 @@ interface AnalysisResult {
 export async function POST(request: Request) {
   try {
     const body: AnalysisRequest = await request.json();
-    const { currentSnapshot, previousSnapshot, assetName, reportType } = body;
+    const { currentSnapshot, previousSnapshot, assetName, reportType, visualAnomalies } = body;
 
     if (!currentSnapshot) {
       return NextResponse.json(
@@ -40,7 +50,7 @@ export async function POST(request: Request) {
     }
 
     // Build the analysis prompt
-    const prompt = buildAnalysisPrompt(currentSnapshot, previousSnapshot, assetName, reportType);
+    const prompt = buildAnalysisPrompt(currentSnapshot, previousSnapshot, assetName, reportType, visualAnomalies);
 
     // Call the Platform's chat API for AI analysis
     try {
@@ -68,7 +78,7 @@ export async function POST(request: Request) {
         const aiResponse = chatResult.response || chatResult.message || '';
 
         // Parse the AI response into structured format
-        const analysis = parseAIResponse(aiResponse, currentSnapshot, previousSnapshot);
+        const analysis = parseAIResponse(aiResponse, currentSnapshot, previousSnapshot, visualAnomalies);
 
         return NextResponse.json({
           success: true,
@@ -80,7 +90,7 @@ export async function POST(request: Request) {
     }
 
     // Fallback: Run basic heuristic analysis if AI is unavailable
-    const fallbackAnalysis = runHeuristicAnalysis(currentSnapshot, previousSnapshot);
+    const fallbackAnalysis = runHeuristicAnalysis(currentSnapshot, previousSnapshot, visualAnomalies);
 
     return NextResponse.json({
       success: true,
@@ -100,7 +110,8 @@ function buildAnalysisPrompt(
   currentSnapshot: any,
   previousSnapshot: any | undefined,
   assetName: string | undefined,
-  reportType: string | undefined
+  reportType: string | undefined,
+  visualAnomalies?: VisualAnomaly[]
 ): string {
   let prompt = `You are a data quality analyst reviewing a business report. Analyze the following extracted data for anomalies, suspicious patterns, or data quality issues.
 
@@ -121,6 +132,18 @@ ${currentSnapshot.alerts?.length > 0 ? currentSnapshot.alerts.join('\n') : 'No a
 
 ## Freshness Indicators
 ${currentSnapshot.freshnessIndicators?.join('\n') || 'None detected'}
+
+## Visual Anomalies (Quick Scan Results)
+${
+  visualAnomalies && visualAnomalies.length > 0
+    ? visualAnomalies
+        .map(
+          (a) =>
+            `- [${a.severity.toUpperCase()}] ${a.message}${a.value ? ` (Value: ${a.value})` : ''}`
+        )
+        .join('\n')
+    : 'No visual anomalies detected by quick scan'
+}
 `;
 
   if (previousSnapshot) {
@@ -177,7 +200,8 @@ Respond ONLY with the JSON object, no additional text.`;
 function parseAIResponse(
   aiResponse: string,
   currentSnapshot: any,
-  previousSnapshot: any | undefined
+  previousSnapshot: any | undefined,
+  visualAnomalies?: VisualAnomaly[]
 ): AnalysisResult {
   try {
     // Try to extract JSON from the response
@@ -197,16 +221,30 @@ function parseAIResponse(
   }
 
   // Return a basic analysis if parsing fails
-  return runHeuristicAnalysis(currentSnapshot, previousSnapshot);
+  return runHeuristicAnalysis(currentSnapshot, previousSnapshot, visualAnomalies);
 }
 
 function runHeuristicAnalysis(
   currentSnapshot: any,
-  previousSnapshot: any | undefined
+  previousSnapshot: any | undefined,
+  visualAnomalies?: VisualAnomaly[]
 ): AnalysisResult {
   const anomalies: AIAnomaly[] = [];
   const recommendations: string[] = [];
   const comparisonInsights: string[] = [];
+
+  // Include visual anomalies from Quick Scan
+  if (visualAnomalies && visualAnomalies.length > 0) {
+    for (const va of visualAnomalies) {
+      anomalies.push({
+        severity: va.severity,
+        type: va.type,
+        message: va.message,
+        details: va.value ? `Detected value: ${va.value}` : undefined,
+        affectedData: va.element,
+      });
+    }
+  }
 
   // Check for suspicious KPI values
   for (const kpi of currentSnapshot.kpis || []) {

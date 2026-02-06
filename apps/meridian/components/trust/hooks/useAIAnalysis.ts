@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { AIAnalysisResult, SnapshotData } from '../types';
+import { AIAnalysisResult, SnapshotData, VisualAnomaly } from '../types';
 import { extractPageData, PageDataSnapshot } from '../utils/dataExtractor';
 
 interface UseAIAnalysisOptions {
   assetName?: string;
   reportType?: string;
+  visualAnomalies?: VisualAnomaly[];
 }
 
 interface UseAIAnalysisResult {
@@ -20,7 +21,7 @@ interface UseAIAnalysisResult {
 }
 
 export function useAIAnalysis(options: UseAIAnalysisOptions = {}): UseAIAnalysisResult {
-  const { assetName, reportType } = options;
+  const { assetName, reportType, visualAnomalies = [] } = options;
 
   const [analysis, setAnalysis] = useState<AIAnalysisResult | null>(null);
   const [previousSnapshot, setPreviousSnapshot] = useState<SnapshotData | null>(null);
@@ -68,6 +69,7 @@ export function useAIAnalysis(options: UseAIAnalysisOptions = {}): UseAIAnalysis
           previousSnapshot: prevSnapshot?.kpis ? prevSnapshot : undefined,
           assetName,
           reportType,
+          visualAnomalies: visualAnomalies.length > 0 ? visualAnomalies : undefined,
         }),
       });
 
@@ -104,7 +106,7 @@ export function useAIAnalysis(options: UseAIAnalysisOptions = {}): UseAIAnalysis
     } finally {
       setIsAnalyzing(false);
     }
-  }, [assetName, reportType]);
+  }, [assetName, reportType, visualAnomalies]);
 
   return {
     analysis,

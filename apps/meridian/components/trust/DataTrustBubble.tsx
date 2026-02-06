@@ -44,7 +44,7 @@ export function DataTrustBubble({ showOnAdminPages = false }: DataTrustBubblePro
     scanInterval: 0, // No auto-repeat
   });
 
-  // AI Analysis
+  // AI Analysis - pass visual anomalies for combined analysis
   const {
     analysis: aiAnalysis,
     isAnalyzing,
@@ -53,6 +53,7 @@ export function DataTrustBubble({ showOnAdminPages = false }: DataTrustBubblePro
   } = useAIAnalysis({
     assetName: pageContext?.assetName,
     reportType: pageContext?.reportType,
+    visualAnomalies: anomalies,
   });
 
   // Determine overall status
