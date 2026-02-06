@@ -97,3 +97,43 @@ export interface ReportAPIResponse {
   issueId?: string;
   error?: string;
 }
+
+// AI Analysis types
+export interface AIAnomaly {
+  severity: 'critical' | 'warning' | 'info';
+  type: string;
+  message: string;
+  details?: string;
+  affectedData?: string;
+}
+
+export interface AIAnalysisResult {
+  anomalies: AIAnomaly[];
+  summary: string;
+  trustImpact: 'none' | 'minor' | 'moderate' | 'severe';
+  recommendations: string[];
+  comparisonInsights?: string[];
+}
+
+export interface SnapshotData {
+  id?: string;
+  pageUrl: string;
+  pageTitle: string;
+  assetName?: string;
+  reportType?: string;
+  extractedAt: string;
+  kpis: Array<{
+    label: string;
+    value: string;
+    rawValue: number | null;
+    unit?: string;
+    trend?: 'up' | 'down' | 'stable';
+  }>;
+  tables: Array<{
+    id: string;
+    headers: string[];
+    rowCount: number;
+  }>;
+  alerts: string[];
+  freshnessIndicators: string[];
+}

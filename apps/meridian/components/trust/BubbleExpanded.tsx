@@ -1,9 +1,10 @@
 'use client';
 
 import { X, Eye, RefreshCw, FileWarning, ExternalLink } from 'lucide-react';
-import { TrustData, VisualAnomaly, PageContext } from './types';
+import { TrustData, VisualAnomaly, PageContext, AIAnalysisResult } from './types';
 import { TrustScoreDisplay } from './TrustScoreDisplay';
 import { AnomalyList } from './AnomalyList';
+import { AIAnalysisPanel } from './AIAnalysisPanel';
 
 interface BubbleExpandedProps {
   trustData: TrustData | null;
@@ -11,9 +12,13 @@ interface BubbleExpandedProps {
   pageContext: PageContext | null;
   isScanning: boolean;
   isLoading: boolean;
+  aiAnalysis: AIAnalysisResult | null;
+  isAnalyzing: boolean;
+  hasComparison: boolean;
   onClose: () => void;
   onRescan: () => void;
   onReportIssue: () => void;
+  onRunAIAnalysis: () => void;
 }
 
 export function BubbleExpanded({
@@ -22,9 +27,13 @@ export function BubbleExpanded({
   pageContext,
   isScanning,
   isLoading,
+  aiAnalysis,
+  isAnalyzing,
+  hasComparison,
   onClose,
   onRescan,
   onReportIssue,
+  onRunAIAnalysis,
 }: BubbleExpandedProps) {
   return (
     <div className="w-80 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200">
@@ -44,7 +53,7 @@ export function BubbleExpanded({
       </div>
 
       {/* Content */}
-      <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+      <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
         {/* Page context */}
         {pageContext?.assetName && (
           <div className="flex items-center gap-2 text-xs text-gray-500 pb-2 border-b border-gray-100">
@@ -79,20 +88,28 @@ export function BubbleExpanded({
           )}
         </div>
 
-        {/* Page Scan Section */}
+        {/* AI Analysis Section */}
+        <div className="pt-2 border-t border-gray-100">
+          <AIAnalysisPanel
+            analysis={aiAnalysis}
+            isAnalyzing={isAnalyzing}
+            hasComparison={hasComparison}
+            onRunAnalysis={onRunAIAnalysis}
+          />
+        </div>
+
+        {/* Page Scan Section (Basic DOM scan) */}
         <div className="pt-2 border-t border-gray-100">
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
               <FileWarning className="h-4 w-4 text-gray-500" />
-              Page Scan
+              Quick Scan
             </h4>
             {!isScanning && (
-              <span className="text-xs text-gray-400">
-                {anomalies.length} found
-              </span>
+              <span className="text-xs text-gray-400">{anomalies.length} found</span>
             )}
           </div>
-          <AnomalyList anomalies={anomalies} isScanning={isScanning} maxItems={4} />
+          <AnomalyList anomalies={anomalies} isScanning={isScanning} maxItems={3} />
         </div>
       </div>
 
@@ -118,7 +135,7 @@ export function BubbleExpanded({
       {/* Platform link */}
       <div className="px-4 py-2 bg-gray-50 border-t border-gray-100">
         <a
-          href="http://localhost:3002/dashboard"
+          href="https://platform-amygdala.vercel.app/dashboard"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center justify-center gap-1 text-xs text-purple-600 hover:text-purple-700"

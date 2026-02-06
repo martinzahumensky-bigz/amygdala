@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { usePageContext } from './hooks/usePageContext';
 import { useTrustScore } from './hooks/useTrustScore';
 import { useVisualScan } from './hooks/useVisualScan';
+import { useAIAnalysis } from './hooks/useAIAnalysis';
 import { BubbleCollapsed } from './BubbleCollapsed';
 import { BubbleExpanded } from './BubbleExpanded';
 import { IssueReportForm } from './IssueReportForm';
@@ -43,8 +44,22 @@ export function DataTrustBubble({ showOnAdminPages = false }: DataTrustBubblePro
     scanInterval: 0, // No auto-repeat
   });
 
+  // AI Analysis
+  const {
+    analysis: aiAnalysis,
+    isAnalyzing,
+    hasComparison,
+    runAnalysis,
+  } = useAIAnalysis({
+    assetName: pageContext?.assetName,
+    reportType: pageContext?.reportType,
+  });
+
   // Determine overall status
   const getOverallStatus = useCallback((): TrustStatus => {
+    // AI analysis critical issues take priority
+    if (aiAnalysis?.trustImpact === 'severe') return 'red';
+
     // Critical anomalies always result in red
     if (anomalySummary.critical > 0) return 'red';
 
@@ -52,14 +67,19 @@ export function DataTrustBubble({ showOnAdminPages = false }: DataTrustBubblePro
     if (trustData) {
       // Combine trust status with anomaly warnings
       if (trustData.status === 'red' || anomalySummary.warnings > 2) return 'red';
-      if (trustData.status === 'amber' || anomalySummary.warnings > 0) return 'amber';
+      if (
+        trustData.status === 'amber' ||
+        anomalySummary.warnings > 0 ||
+        aiAnalysis?.trustImpact === 'moderate'
+      )
+        return 'amber';
       return trustData.status;
     }
 
     // Fallback based on anomalies only
     if (anomalySummary.warnings > 0) return 'amber';
     return 'green';
-  }, [trustData, anomalySummary]);
+  }, [trustData, anomalySummary, aiAnalysis]);
 
   const handleExpand = useCallback(() => {
     setIsExpanded(true);
@@ -81,6 +101,10 @@ export function DataTrustBubble({ showOnAdminPages = false }: DataTrustBubblePro
     setIsReportModalOpen(false);
   }, []);
 
+  const handleRunAIAnalysis = useCallback(() => {
+    runAnalysis();
+  }, [runAnalysis]);
+
   // Don't render if shouldn't show (e.g., admin pages)
   if (!shouldShow) {
     return null;
@@ -99,17 +123,27 @@ export function DataTrustBubble({ showOnAdminPages = false }: DataTrustBubblePro
             pageContext={pageContext}
             isScanning={isScanning}
             isLoading={isTrustLoading}
+            aiAnalysis={aiAnalysis}
+            isAnalyzing={isAnalyzing}
+            hasComparison={hasComparison}
             onClose={handleCollapse}
             onRescan={handleRescan}
             onReportIssue={handleReportIssue}
+            onRunAIAnalysis={handleRunAIAnalysis}
           />
         ) : (
           <BubbleCollapsed
             status={overallStatus}
             onClick={handleExpand}
-            anomalyCount={anomalySummary.total}
-            criticalCount={anomalySummary.critical}
-            warningCount={anomalySummary.warnings}
+            anomalyCount={anomalySummary.total + (aiAnalysis?.anomalies?.length || 0)}
+            criticalCount={
+              anomalySummary.critical +
+              (aiAnalysis?.anomalies?.filter((a) => a.severity === 'critical').length || 0)
+            }
+            warningCount={
+              anomalySummary.warnings +
+              (aiAnalysis?.anomalies?.filter((a) => a.severity === 'warning').length || 0)
+            }
             isLoading={isTrustLoading}
           />
         )}
